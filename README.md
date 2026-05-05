@@ -1,3 +1,4 @@
+cat << 'EOF' > README.md
 # 🏥 Multi-Modal AI-Accelerated Medical Edge System
 
 ![Python](https://img.shields.io/badge/Python-3.10-blue.svg)
@@ -27,3 +28,4 @@ An offline, commercial-grade Multi-Modal Medical AI Edge Server designed for the
 * **Hamid** - ML Models, Transformer Fusion, SHAP
 * **Ahmed Rasheed** - Backend API, DICOM Networking, SQLite
 * **Aalyan Zahid (Node 2)** - GUI Dashboard, Flutter Mobile App, Documentation
+EOF
