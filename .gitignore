@@ -1,0 +1,16 @@
+# Ignore Raw Medical Datasets
+EYES/
+BONE/
+SKIN/
+Pneumonia/
+MRI/
+ECG/
+mit-bih-arrhythmia-database-1.0.0/
+
+# Ignore Heavy PyTorch Weights
+production_weights/
+*.pth
+
+# Ignore Python Cache
+__pycache__/
+*.pyc
