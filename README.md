@@ -27,5 +27,5 @@ An offline, commercial-grade Multi-Modal Medical AI Edge Server designed for the
 * **Aalyan Zahid** - Edge Architecture, Hardware, TensorRT Pipeline
 * **Hamid** - ML Models, Transformer Fusion, SHAP
 * **Ahmed Rasheed** - Backend API, DICOM Networking, SQLite
-* **Aalyan Zahid (Node 2)** - GUI Dashboard, Flutter Mobile App, Documentation
+* **Muhammad Muddasir** - GUI Dashboard, Flutter Mobile App, Documentation
 EOF
