@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Systems Architecture - Thesis Schematic</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            /* Professional Data-Viz Palette */
+            --bg-color: #F4F6F8;
+            --grid-line: #E2E8F0;
+            --text-main: #0F172A;
+            --text-muted: #475569;
+            
+            --border-heavy: 2px solid #0F172A;
+            --border-light: 1px solid #94A3B8;
+            --shadow-hard: 4px 4px 0px rgba(15, 23, 42, 0.1);
+
+            --c-blue: #EFF6FF; --b-blue: #3B82F6; --t-blue: #1D4ED8;
+            --c-green: #F0FDF4; --b-green: #22C55E; --t-green: #15803D;
+            --c-orange: #FFF7ED; --b-orange: #F97316; --t-orange: #C2410C;
+            --c-red: #FEF2F2; --b-red: #EF4444; --t-red: #B91C1C;
+            --c-purple: #FAF5FF; --b-purple: #A855F7; --t-purple: #7E22CE;
+            --c-grey: #F8FAFC; --b-grey: #64748B; --t-grey: #334155;
+            
+            /* Arrow Color */
+            --arrow-color: #64748B; 
+        }
+
+        * { box-sizing: border-box; }
+
+        /* PRINT OVERRIDES - Forces browsers to print arrows and backgrounds */
+        @media print {
+            * {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                color-adjust: exact !important;
+            }
+            body {
+                background-color: #FFFFFF !important;
+                background-image: none !important; /* Removes grid for cleaner print */
+                padding: 0 !important;
+            }
+            .thesis-board {
+                box-shadow: none !important;
+                border: 1px solid #000 !important;
+            }
+            .connector-down, .connector-right {
+                background-color: #0F172A !important; /* Make arrows black for print */
+            }
+            .connector-down::after {
+                border-top-color: #0F172A !important;
+            }
+            .connector-right::after {
+                border-left-color: #0F172A !important;
+            }
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            background-image: 
+                linear-gradient(var(--grid-line) 1px, transparent 1px),
+                linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+            background-size: 20px 20px;
+            color: var(--text-main);
+            margin: 0;
+            padding: 40px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .thesis-board {
+            max-width: 1500px;
+            width: 100%;
+            background: #FFFFFF;
+            border: var(--border-heavy);
+            box-shadow: 8px 8px 0px rgba(15, 23, 42, 0.15);
+            position: relative;
+        }
+
+        /* HEADER BLOCK */
+        .schematic-header {
+            border-bottom: var(--border-heavy);
+            padding: 20px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            background: #FAFAFA;
+        }
+
+        .header-title h1 {
+            font-size: 24px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: -0.5px;
+            margin: 0 0 8px 0;
+            color: var(--text-main);
+        }
+
+        .header-subtitle {
+            font-size: 13px;
+            color: #555;
+            margin-top: 6px;
+            font-weight: 400;
+            letter-spacing: 0.3px;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .header-meta {
+            text-align: right;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+
+        /* MAIN LAYOUT */
+        .layout-grid {
+            display: grid;
+            grid-template-columns: 7fr 3fr;
+            min-height: 800px;
+        }
+
+        .hardware-boundary {
+            padding: 30px;
+            border-right: var(--border-heavy);
+            position: relative;
+        }
+
+        .boundary-label {
+            position: absolute;
+            top: -12px;
+            left: 30px;
+            background: #0F172A;
+            color: #FFF;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            font-weight: 700;
+            padding: 4px 12px;
+            letter-spacing: 1px;
+        }
+
+        .ui-panel {
+            background: #FAFAFA;
+            padding: 30px;
+        }
+
+        /* NODE COMPONENTS */
+        .flow-row {
+            display: flex;
+            justify-content: center;
+            align-items: stretch;
+            gap: 20px;
+            margin-bottom: 25px;
+            position: relative;
+        }
+
+        .block {
+            background: #FFF;
+            border: var(--border-light);
+            border-top-width: 4px;
+            padding: 16px;
+            flex: 1;
+            box-shadow: var(--shadow-hard);
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .block-title {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .block-desc {
+            color: var(--text-muted);
+        }
+
+        /* COLORS */
+        .clr-blue { border-top-color: var(--b-blue); background: var(--c-blue); }
+        .clr-blue .block-title { color: var(--t-blue); }
+        
+        .clr-green { border-top-color: var(--b-green); background: var(--c-green); }
+        .clr-green .block-title { color: var(--t-green); }
+
+        .clr-orange { border-top-color: var(--b-orange); background: var(--c-orange); }
+        .clr-orange .block-title { color: var(--t-orange); }
+
+        .clr-red { border-top-color: var(--b-red); background: var(--c-red); }
+        .clr-red .block-title { color: var(--t-red); }
+
+        .clr-purple { border-top-color: var(--b-purple); background: var(--c-purple); }
+        .clr-purple .block-title { color: var(--t-purple); }
+
+        .clr-grey { border-top-color: var(--b-grey); background: var(--c-grey); }
+        .clr-grey .block-title { color: var(--t-grey); }
+
+        /* THE PIPELINE */
+        .pipeline-container {
+            border: var(--border-heavy);
+            background: #FFFFFF;
+            padding: 25px;
+            margin: 35px 0;
+            position: relative;
+        }
+
+        .pipeline-label {
+            position: absolute;
+            top: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #FFF;
+            padding: 0 15px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            font-weight: 700;
+            color: #0F172A;
+            border: var(--border-heavy);
+        }
+
+        .pipeline-track {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .queue-buffer {
+            width: 50px;
+            height: 50px;
+            border: 2px dashed #94A3B8;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            font-weight: 700;
+            color: #64748B;
+            background: #F8FAFC;
+            flex-shrink: 0;
+            text-align: center;
+            line-height: 1.1;
+        }
+
+        /* ARROWS & CONNECTORS */
+        .connector-down {
+            height: 25px;
+            width: 3px;
+            background: var(--arrow-color);
+            margin: 0 auto 25px auto;
+            position: relative;
+        }
+        .connector-down::after {
+            content: '';
+            position: absolute;
+            bottom: -6px;
+            left: -5px;
+            border-width: 6px 6px 0;
+            border-style: solid;
+            border-color: var(--arrow-color) transparent transparent transparent;
+        }
+
+        .connector-right {
+            width: 20px;
+            height: 3px;
+            background: var(--arrow-color);
+            position: relative;
+            flex-shrink: 0;
+        }
+        .connector-right::after {
+            content: '';
+            position: absolute;
+            right: -6px;
+            top: -5px;
+            border-width: 6px 0 6px 6px;
+            border-style: solid;
+            border-color: transparent transparent transparent var(--arrow-color);
+        }
+
+        /* UI PANEL SPECIFICS */
+        .panel-header {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            font-weight: 700;
+            border-bottom: 2px solid #0F172A;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+            color: #0F172A;
+        }
+
+        .gui-window {
+            background: #0F172A;
+            border: var(--border-heavy);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 25px;
+            box-shadow: var(--shadow-hard);
+        }
+
+        .gui-bar {
+            background: #1E293B;
+            padding: 6px 12px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            color: #94A3B8;
+            display: flex;
+            gap: 6px;
+            border-bottom: 1px solid #334155;
+        }
+        
+        .gui-dot { width: 8px; height: 8px; border-radius: 50%; background: #475569; }
+
+        .gui-content {
+            padding: 15px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: #E2E8F0;
+            line-height: 1.6;
+        }
+
+        .gui-content strong { color: #38BDF8; display: block; margin-bottom: 4px; font-size: 12px; }
+        .highlight-red { color: #F87171; font-weight: bold; }
+        .highlight-green { color: #4ADE80; font-weight: bold; }
+
+        .hardware-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+        }
+        .hardware-list li {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 0;
+            border-bottom: 1px solid #E2E8F0;
+        }
+        .hw-led-g { width: 12px; height: 12px; border-radius: 50%; background: #22C55E; border: 1px solid #14532D; box-shadow: 0 0 5px #22C55E;}
+        .hw-led-r { width: 12px; height: 12px; border-radius: 50%; background: #EF4444; border: 1px solid #7F1D1D; box-shadow: 0 0 5px #EF4444;}
+        .hw-buzzer { font-size: 14px; }
+
+    </style>
+</head>
+<body>
+
+<div class="thesis-board">
+    
+    <header class="schematic-header">
+        <div class="header-title">
+            <h1>Accelerated Medical Imaging using Machine Learning Architectures</h1>
+            <p class="header-subtitle">
+                Multi-Modal AI Edge System &nbsp;|&nbsp; DICOM Integration &nbsp;|&nbsp; 
+                Bayesian Uncertainty Quantification &nbsp;|&nbsp; Continual Learning
+            </p>
+        </div>
+        <div class="header-meta">
+            University of Engineering and Technology, Lahore<br>
+            Department of Electrical Engineering<br>
+            <br>
+            <strong>Aalyan</strong> &nbsp;·&nbsp; 
+            <strong>Hamid</strong> &nbsp;·&nbsp; 
+            <strong>Ahmed Rasheed</strong> &nbsp;·&nbsp; 
+            <strong>Muhammad Mudassir</strong><br>
+            <br>
+            Supervisor: [Supervisor Name]<br>
+            Hardware Target: NVIDIA Jetson Nano 4GB &nbsp;|&nbsp; Session 2024–2025
+        </div>
+    </header>
+
+    <div class="layout-grid">
+        
+        <div class="hardware-boundary">
+            
+            <div class="flow-row">
+                <div class="block clr-grey" style="flex: 0.8;">
+                    <div class="block-title">Orthanc PACS Server</div>
+                    <div class="block-desc">External simulated hospital node.<br>Sends/Receives DICOM SR.</div>
+                </div>
+                <div style="display: flex; align-items: center; font-family: monospace; font-size: 10px; color: #64748B; padding: 0 10px;">
+                    ◄ DICOM ►
+                </div>
+                <div class="block clr-blue">
+                    <div class="block-title">Entry A: Modality</div>
+                    <div class="block-desc">Real MRI/X-ray machine over DICOM Network → pynetdicom C-STORE</div>
+                </div>
+                <div class="block clr-blue">
+                    <div class="block-title">Entry B: Mobile</div>
+                    <div class="block-desc">Doctor's Smartphone / Laptop → HTTP POST → Flask REST API (:5000)</div>
+                </div>
+            </div>
+
+            <div class="connector-down"></div>
+            
+            <div class="boundary-label">EXECUTION: NVIDIA JETSON NANO</div>
+
+            <div class="flow-row">
+                <div class="block clr-green" style="flex: 2;">
+                    <div class="block-title">STAGE 0: OOD BOUNCER</div>
+                    <div class="block-desc">Convolutional Autoencoder reconstructs input.<br>Computes Mean Squared Error (MSE) vs original.</div>
+                </div>
+                <div class="connector-right" style="width: 30px;"></div>
+                <div class="block clr-red" style="flex: 1;">
+                    <div class="block-title">REJECT: OOD</div>
+                    <div class="block-desc">If MSE > Threshold: Log to SQLite, halt execution.</div>
+                </div>
+            </div>
+
+            <div class="connector-down"></div>
+
+            <div class="pipeline-container">
+                <div class="pipeline-label">3-STAGE THREADED PIPELINE (PARALLELISM)</div>
+                <div class="pipeline-track">
+                    
+                    <div class="block clr-green">
+                        <div class="block-title">STAGE 1 (CPU)</div>
+                        <div class="block-desc">
+                            • OpenCV byte decode<br>
+                            • Resize to 224x224 px<br>
+                            • ImageNet Normalization<br>
+                            • Reshape to [1,3,224,224]
+                        </div>
+                    </div>
+                    
+                    <div class="connector-right"></div>
+                    <div class="queue-buffer">Q#1<br>Buffer</div>
+                    <div class="connector-right"></div>
+
+                    <div class="block clr-green">
+                        <div class="block-title">STAGE 2 (GPU)</div>
+                        <div class="block-desc">
+                            • CUDA memcpy H2D<br>
+                            • TensorRT FP16 engine<br>
+                            • Output: Logits + Features<br>
+                            • CUDA memcpy D2H
+                        </div>
+                    </div>
+
+                    <div class="connector-right"></div>
+                    <div class="queue-buffer">Q#2<br>Buffer</div>
+                    <div class="connector-right"></div>
+
+                    <div class="block clr-orange">
+                        <div class="block-title">STAGE 3 (CPU)</div>
+                        <div class="block-desc" style="font-size: 11px;">
+                            • <strong>MC Dropout:</strong> 20x passes for Uncertainty%<br>
+                            • <strong>GradCAM:</strong> 1280 maps → JET overlay<br>
+                            • <strong>Patient Fusion:</strong> Late-Fusion MLP<br>
+                            • <strong>Phi-2 LLM:</strong> Generates clinical text via llama.cpp
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <div class="connector-down"></div>
+
+            <div class="flow-row">
+                <div class="block clr-orange" style="text-align: center; max-width: 400px;">
+                    <div class="block-title" style="justify-content: center;">CONFIDENCE-GATED ROUTING</div>
+                    <div class="block-desc">Evaluates Output based on Mean Confidence & Std Deviation</div>
+                </div>
+            </div>
+
+            <div class="flow-row">
+                <div class="block clr-green">
+                    <div class="block-title">TIER 1 (SAFE)</div>
+                    <div class="block-desc">>90% Conf, &lt;5% Uncert.<br>Auto-approve. Normal DICOM SR generated.</div>
+                </div>
+                <div class="block clr-orange">
+                    <div class="block-title">TIER 2 (WARN)</div>
+                    <div class="block-desc">70-90% Conf OR 5-10% Uncert.<br>Flags DICOM SR for review.</div>
+                </div>
+                <div class="block clr-red">
+                    <div class="block-title">TIER 3 (URGENT)</div>
+                    <div class="block-desc">&lt;70% Conf OR >10% Uncert.<br>Urgent review, pushes to Active Learning.</div>
+                </div>
+            </div>
+
+            <div class="connector-down"></div>
+
+            <div class="flow-row" style="margin-bottom: 0;">
+                <div class="block clr-purple" style="border-width: 2px;">
+                    <div class="block-title">THE LEARNING LOOP (CONTINUAL & FEDERATED)</div>
+                    <div class="block-desc" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-top: 10px;">
+                        <div>
+                            <strong>1. Active Queue</strong><br>
+                            GUI displays Tier 3 cases. Doctor inputs true label.
+                        </div>
+                        <div>
+                            <strong>2. EWC Continual</strong><br>
+                            Loss = task + λΣ(Fisher×Δθ²).<br>Hot-swaps TRT Engine.
+                        </div>
+                        <div>
+                            <strong>3. Federated Sync</strong><br>
+                            FedAvg across 3 simulated nodes. Distributes Global weights.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <div class="ui-panel">
+            
+            <div class="panel-header">PHYSICAL I/O (GPIO)</div>
+            <ul class="hardware-list" style="margin-bottom: 30px;">
+                <li><div class="hw-led-g"></div> Tier 1 Auto-Approve (Pin 12)</li>
+                <li><div class="hw-led-r"></div> Tier 3 / OOD Alert (Pin 16)</li>
+                <li><div class="hw-buzzer">🔊</div> Piezo Buzzer Alert (Pin 18)</li>
+            </ul>
+
+            <div class="panel-header">CLINICAL DASHBOARD UI</div>
+            
+            <div class="gui-window">
+                <div class="gui-bar"><div class="gui-dot"></div><div class="gui-dot"></div><div class="gui-dot"></div> tab_1_scan.ui</div>
+                <div class="gui-content">
+                    <strong>[IMAGE VIEWER]</strong>
+                    Overlay: GradCAM Heatmap (40%)<br>
+                    Diagnosis: <span class="highlight-green">Glioma Detected</span><br>
+                    Confidence: 94.2% ± 1.2%
+                </div>
+            </div>
+
+            <div class="gui-window">
+                <div class="gui-bar"><div class="gui-dot"></div><div class="gui-dot"></div><div class="gui-dot"></div> tab_2_fusion.ui</div>
+                <div class="gui-content">
+                    <strong>[PATIENT RISK DASHBOARD]</strong>
+                    History: MRI + ECG match found.<br>
+                    Fusion Score: <span class="highlight-red">CRITICAL RISK</span>
+                </div>
+            </div>
+
+            <div class="gui-window">
+                <div class="gui-bar"><div class="gui-dot"></div><div class="gui-dot"></div><div class="gui-dot"></div> tab_3_active.ui</div>
+                <div class="gui-content" style="color: #FBBF24;">
+                    <strong>[ACTIVE LEARNING QUEUE]</strong>
+                    Pending Reviews: 4 cases<br>
+                    > Select Ground Truth: [DROPDOWN]<br>
+                    > [SUBMIT CORRECTION]
+                </div>
+            </div>
+
+            <div class="gui-window">
+                <div class="gui-bar"><div class="gui-dot"></div><div class="gui-dot"></div><div class="gui-dot"></div> tab_4_tegrastats.sh</div>
+                <div class="gui-content" style="color: #4ADE80;">
+                    root@jetson:~# tegrastats<br>
+                    RAM 1845/3956MB (lfb 102x4MB)<br>
+                    CPU [34%,28%,15%,12%]<br>
+                    GR3D_FREQ 99%@921<br>
+                    POM_5V_IN 5120/5120
+                </div>
+            </div>
+
+            <div class="panel-header" style="margin-top: 30px;">THE 6 MODALITIES</div>
+            <div class="block clr-grey" style="font-family: 'JetBrains Mono', monospace; font-size: 10px; padding: 12px;">
+                All utilize EfficientNet-B0 backbone<br><br>
+                1. Brain MRI (Tumor/No Tumor → Subclass)<br>
+                2. Chest X-ray (Pneumonia/Normal)<br>
+                3. Retinal Fundus (DR Grade 0-4)<br>
+                4. ECG Signal (Arrhythmia 1D→STFT)<br>
+                5. Skin Lesion (HAM10000 7-class)<br>
+                6. Bone X-ray (Fracture/Normal)
+            </div>
+
+        </div>
+
+    </div>
+</div>
+
+</body>
+</html>
