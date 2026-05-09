@@ -1,0 +1,9 @@
+{
+    "ewc_enabled": true,
+    "lambda_penalty_base": 0.4,
+    "fisher_sample_size": 1000,
+    "modality_overrides": {
+        "brain_mri": 0.45,
+        "chest_xray": 0.35
+    }
+}
