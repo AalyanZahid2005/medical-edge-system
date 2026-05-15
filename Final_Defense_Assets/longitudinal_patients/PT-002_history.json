@@ -1,0 +1,33 @@
+{
+    "patient_id": "PT-002",
+    "name": "Patient B (Steady Improvement)",
+    "age": 62,
+    "gender": "Female",
+    "primary_modality": "Chest X-ray",
+    "longitudinal_history": [
+        {
+            "visit_date": "2026-04-01",
+            "model_confidence_abnormal": 88.5,
+            "clinical_notes": "Automated scan evaluation. Risk classified as High.",
+            "risk_tier": "High"
+        },
+        {
+            "visit_date": "2026-04-11",
+            "model_confidence_abnormal": 65.2,
+            "clinical_notes": "Automated scan evaluation. Risk classified as Moderate.",
+            "risk_tier": "Moderate"
+        },
+        {
+            "visit_date": "2026-04-21",
+            "model_confidence_abnormal": 42.1,
+            "clinical_notes": "Automated scan evaluation. Risk classified as Moderate.",
+            "risk_tier": "Moderate"
+        },
+        {
+            "visit_date": "2026-05-01",
+            "model_confidence_abnormal": 18.4,
+            "clinical_notes": "Automated scan evaluation. Risk classified as Low.",
+            "risk_tier": "Low"
+        }
+    ]
+}

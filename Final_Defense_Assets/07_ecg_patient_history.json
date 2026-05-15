@@ -1,0 +1,28 @@
+{
+  "patient_id": "PT-8842",
+  "name": "Anonymous_Patient_A",
+  "age": 58,
+  "gender": "Male",
+  "primary_modality": "ECG",
+  "longitudinal_history": [
+    {
+      "visit_date": "2025-11-10",
+      "model_confidence_abnormal": 12.5,
+      "clinical_notes": "Routine checkup. Mild baseline noise, no significant arrhythmia detected.",
+      "risk_tier": "Low"
+    },
+    {
+      "visit_date": "2026-02-15",
+      "model_confidence_abnormal": 45.2,
+      "clinical_notes": "Patient reported occasional palpitations. Slight ST-segment elevation noted.",
+      "risk_tier": "Moderate"
+    },
+    {
+      "visit_date": "2026-04-02",
+      "model_confidence_abnormal": 78.9,
+      "clinical_notes": "Increased frequency of palpitations. AI flagged potential early-stage Atrial Fibrillation.",
+      "risk_tier": "High"
+    }
+  ],
+  "current_scan_path": "07_ecg_current.jpg"
+}

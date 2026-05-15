@@ -1,0 +1,33 @@
+{
+    "patient_id": "PT-003",
+    "name": "Patient C (Stable/Healthy)",
+    "age": 62,
+    "gender": "Male",
+    "primary_modality": "Chest X-ray",
+    "longitudinal_history": [
+        {
+            "visit_date": "2026-04-01",
+            "model_confidence_abnormal": 12.1,
+            "clinical_notes": "Automated scan evaluation. Risk classified as Low.",
+            "risk_tier": "Low"
+        },
+        {
+            "visit_date": "2026-04-11",
+            "model_confidence_abnormal": 11.5,
+            "clinical_notes": "Automated scan evaluation. Risk classified as Low.",
+            "risk_tier": "Low"
+        },
+        {
+            "visit_date": "2026-04-21",
+            "model_confidence_abnormal": 13.2,
+            "clinical_notes": "Automated scan evaluation. Risk classified as Low.",
+            "risk_tier": "Low"
+        },
+        {
+            "visit_date": "2026-05-01",
+            "model_confidence_abnormal": 12.8,
+            "clinical_notes": "Automated scan evaluation. Risk classified as Low.",
+            "risk_tier": "Low"
+        }
+    ]
+}

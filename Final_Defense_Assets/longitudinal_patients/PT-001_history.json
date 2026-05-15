@@ -1,0 +1,33 @@
+{
+    "patient_id": "PT-001",
+    "name": "Patient A (Rapid Decline)",
+    "age": 62,
+    "gender": "Male",
+    "primary_modality": "Chest X-ray",
+    "longitudinal_history": [
+        {
+            "visit_date": "2026-04-01",
+            "model_confidence_abnormal": 15.2,
+            "clinical_notes": "Automated scan evaluation. Risk classified as Low.",
+            "risk_tier": "Low"
+        },
+        {
+            "visit_date": "2026-04-11",
+            "model_confidence_abnormal": 45.8,
+            "clinical_notes": "Automated scan evaluation. Risk classified as Moderate.",
+            "risk_tier": "Moderate"
+        },
+        {
+            "visit_date": "2026-04-21",
+            "model_confidence_abnormal": 78.4,
+            "clinical_notes": "Automated scan evaluation. Risk classified as High.",
+            "risk_tier": "High"
+        },
+        {
+            "visit_date": "2026-05-01",
+            "model_confidence_abnormal": 92.1,
+            "clinical_notes": "Automated scan evaluation. Risk classified as High.",
+            "risk_tier": "High"
+        }
+    ]
+}

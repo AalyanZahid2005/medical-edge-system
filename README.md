@@ -1,5 +1,5 @@
 cat << 'EOF' > README.md
-# 🏥 Multi-Modal AI-Accelerated Medical Edge System
+# Multi-Modal AI-Accelerated Medical Edge System
 
 ![Python](https://img.shields.io/badge/Python-3.10-blue.svg)
 ![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-EE4C2C.svg)
@@ -8,13 +8,13 @@ cat << 'EOF' > README.md
 
 An offline, commercial-grade Multi-Modal Medical AI Edge Server designed for the NVIDIA Jetson Nano. This system processes 6 different medical modalities through a custom 3-Stage Threaded TensorRT pipeline, offering real-time diagnostics, hardware routing, and continual learning without relying on cloud compute.
 
-## 🚀 Core Architecture
+## Core Architecture
 
 1. **Stage 1: Preprocessing (CPU)** - Asynchronous OpenCV decoding and Out-Of-Distribution (OOD) anomaly rejection.
 2. **Stage 2: Inference (GPU)** - High-speed parallel execution using TensorRT FP16/INT8 engines.
 3. **Stage 3: Post-Processing (CPU)** - MC Dropout Bayesian Uncertainty, True CAM generation, Cross-Modal Transformer Fusion, and SHAP explainability.
 
-## ✨ Advanced Features
+## Advanced Features
 
 * **6-in-1 Modality Support:** Brain MRI, Chest X-Ray, Retinal Fundus, ECG Signal, Skin Lesion, and Bone X-Ray.
 * **Bayesian Uncertainty:** 20-pass MC Dropout to quantify AI confidence intervals.
@@ -23,9 +23,9 @@ An offline, commercial-grade Multi-Modal Medical AI Edge Server designed for the
 * **Federated Learning (FedAvg):** Multi-node weight aggregation for privacy-preserving model updates.
 * **Enterprise Security:** AES-256-GCM model encryption in RAM, JWT API authentication, and autonomous DICOM C-FIND polling.
 
-## 👥 The Team
+## The Team
 * **Aalyan Zahid** - Edge Architecture, Hardware, TensorRT Pipeline
 * **Hamid** - ML Models, Transformer Fusion, SHAP
 * **Ahmed Rasheed** - Backend API, DICOM Networking, SQLite
-* **Muhammad Muddasir** - GUI Dashboard, Flutter Mobile App, Documentation
+* **Muhammad Muddasir** - Documentation
 EOF

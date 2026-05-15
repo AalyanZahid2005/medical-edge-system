@@ -1,0 +1,6 @@
+Metric,Baseline MLP,Cross-Modal Transformer
+Accuracy (%),89.5,94.2
+Precision (%),88.1,93.8
+Recall (%),87.5,95.1
+Inference Latency (ms),4.2,0.02
+Parameter Size (MB),15.0,8.5

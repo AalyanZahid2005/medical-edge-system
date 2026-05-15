@@ -1,0 +1,33 @@
+{
+    "patient_id": "PT-005",
+    "name": "Patient E (Sudden Emergency)",
+    "age": 62,
+    "gender": "Male",
+    "primary_modality": "Chest X-ray",
+    "longitudinal_history": [
+        {
+            "visit_date": "2026-04-01",
+            "model_confidence_abnormal": 14.2,
+            "clinical_notes": "Automated scan evaluation. Risk classified as Low.",
+            "risk_tier": "Low"
+        },
+        {
+            "visit_date": "2026-04-11",
+            "model_confidence_abnormal": 15.1,
+            "clinical_notes": "Automated scan evaluation. Risk classified as Low.",
+            "risk_tier": "Low"
+        },
+        {
+            "visit_date": "2026-04-21",
+            "model_confidence_abnormal": 13.9,
+            "clinical_notes": "Automated scan evaluation. Risk classified as Low.",
+            "risk_tier": "Low"
+        },
+        {
+            "visit_date": "2026-05-01",
+            "model_confidence_abnormal": 95.8,
+            "clinical_notes": "Automated scan evaluation. Risk classified as High.",
+            "risk_tier": "High"
+        }
+    ]
+}
