@@ -1,23 +1,25 @@
-# Hardware GPIO Stub for Jetson Nano
-try:
-    import Jetson.GPIO as GPIO
-    HARDWARE_AVAILABLE = True
-except ImportError:
-    HARDWARE_AVAILABLE = False
-    print("[HARDWARE] Jetson.GPIO library not found. Running in simulation mode.")
+import Jetson.GPIO as GPIO
 
 def setup_pins():
-    print("[GPIO] Pins initialized. LEDs ready.")
-    if HARDWARE_AVAILABLE:
-        GPIO.setmode(GPIO.BOARD)
-        GPIO.setwarnings(False)
-        # Setup pins here when hardware is attached
+    # CRITICAL: Use physical board pin numbers to match your actual wiring
+    GPIO.setmode(GPIO.BOARD)
+    GPIO.setwarnings(False)
+    
+    # Setup pins 11 (Green), 13 (Red), 15 (Buzzer)
+    GPIO.setup(11, GPIO.OUT, initial=GPIO.LOW)
+    GPIO.setup(13, GPIO.OUT, initial=GPIO.LOW)
+    GPIO.setup(15, GPIO.OUT, initial=GPIO.LOW)
 
 def trigger_success_led():
-    print("[GPIO] 🟢 GREEN LED ON (High Confidence)")
+    GPIO.output(11, GPIO.HIGH) # Green ON
+    GPIO.output(13, GPIO.LOW)  # Red OFF
+    GPIO.output(15, GPIO.LOW)  # Buzzer OFF
 
 def trigger_warning_led():
-    print("[GPIO] 🟡 YELLOW LED BLINKING (Medium Confidence)")
+    # Placeholder if you decide to add a yellow LED later
+    pass 
 
 def trigger_emergency_alarm():
-    print("[GPIO] 🔴 RED LED ON + BUZZER ACTIVATED (Critical/OOD)")
+    GPIO.output(13, GPIO.HIGH) # Red ON
+    GPIO.output(15, GPIO.HIGH) # Buzzer ON
+    GPIO.output(11, GPIO.LOW)  # Green OFF
