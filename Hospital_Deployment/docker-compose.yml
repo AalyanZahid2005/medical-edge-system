@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  # 1. Orthanc PACS Server (DICOM Storage & Routing)
+  orthanc-pacs:
+    image: jodogne/orthanc:latest
+    container_name: orthanc_pacs
+    ports:
+      - "4242:4242" # DICOM standard port (for Jetson to pull from / push to)
+      - "8042:8042" # Orthanc Web GUI and REST API
+    environment:
+      - ORTHANC_NAME=MedicalEdgePACS
+      - ORTHANC__DICOM_AET=ORTHANC
+      # Allow Jetson to query it without strict security blocks locally
+      - ORTHANC__AUTHENTICATION_ENABLED=false 
+    volumes:
+      - orthanc_data:/var/lib/orthanc/db # Persistent database so scans survive reboots
+    restart: unless-stopped
+    networks:
+      - hospital_network
+
+  # 2. HAPI FHIR Server (EMR Integration)
+  hapi-fhir:
+    image: hapiproject/hapi:latest
+    container_name: hapi_fhir_server
+    ports:
+      - "8080:8080" # FHIR API Port (Jetson POSTs DiagnosticReports here)
+    environment:
+      - hapi.fhir.tester.home.name=Medical Edge AI FHIR Server
+    volumes:
+      - fhir_data:/data/hapi/database # Persistent FHIR records
+    restart: unless-stopped
+    networks:
+      - hospital_network
+
+  # 3. Flutter Web App (GUI Dashboard)
+  flutter-web-dashboard:
+    image: nginx:alpine
+    container_name: flutter_medai_dashboard
+    ports:
+      - "80:80" # Hospital staff accesses the dashboard via http://localhost
+    volumes:
+      # CRITICAL: This maps your local compiled Flutter code into the Nginx web server
+      - ./flutter_build/web:/usr/share/nginx/html:ro 
+    restart: unless-stopped
+    networks:
+      - hospital_network
+
+# Define persistent storage volumes
+volumes:
+  orthanc_data:
+  fhir_data:
+
+# Create an internal network so containers can talk to each other securely
+networks:
+  hospital_network:
+    driver: bridge
