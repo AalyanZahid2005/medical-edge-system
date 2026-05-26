@@ -1,0 +1,23 @@
+﻿services:
+  orthanc:
+    image: orthancteam/orthanc
+    container_name: m3_orthanc
+    ports:
+      - "8042:8042"
+      - "4242:4242"
+    restart: unless-stopped
+
+  medai-api:
+    image: python:3.10-slim
+    container_name: m3_medai_api
+    working_dir: /app
+    volumes:
+      - .:/app
+    ports:
+      - "5000:5000"
+    command: >
+      sh -c "pip install flask requests pydicom numpy flask-sock &&
+             python api_server.py"
+    depends_on:
+      - orthanc
+    restart: unless-stopped
