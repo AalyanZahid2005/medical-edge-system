@@ -94,7 +94,7 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler("dicom_listener.log", mode="a")
+        logging.FileHandler("dicom_listener.log", mode="a", encoding="utf-8")
     ]
 )
 log = logging.getLogger("dicom_listener")
@@ -353,7 +353,7 @@ def start_listener(host: str, port: int, output_dir: str):
         log.info("[SYSTEM] Listener stopped by user (KeyboardInterrupt).")
     except OSError as e:
         log.error(f"[SYSTEM] Failed to bind {host}:{port} — {e}")
-        log.error("[SYSTEM] Is port 11112 already in use? Try --port 11113")
+        log.error("[SYSTEM] Is port 11112 already in use-> Try --port 11113")
         sys.exit(1)
 
 
