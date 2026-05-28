@@ -9,7 +9,16 @@ class MedicalInt8Calibrator(trt.IInt8EntropyCalibrator2):
     def __init__(self, training_data_path, cache_file):
         super().__init__()
         self.cache_file = cache_file
-        self.data = [os.path.join(training_data_path, f) for f in os.listdir(training_data_path)]
+        
+        # --- THE FIX: Only read actual image files, completely ignore folders and JSONs ---
+        valid_ext = ('.jpg', '.jpeg', '.png')
+        self.data = [
+            os.path.join(training_data_path, f) 
+            for f in os.listdir(training_data_path) 
+            if f.lower().endswith(valid_ext) and os.path.isfile(os.path.join(training_data_path, f))
+        ]
+        # ----------------------------------------------------------------------------------
+        
         self.batch_size = 1
         self.device_input = cuda.mem_alloc(1 * 3 * 224 * 224 * 4) # Space for 1 image
         self.batches = self.next_batch()

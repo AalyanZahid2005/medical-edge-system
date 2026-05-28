@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  medai-inference:
+    build: .
+    container_name: medai_inference_core
+    environment:
+      - FLASK_ENV=production
+      - PYTHONIOENCODING=utf-8
+      - LANG=C.UTF-8
+    runtime: nvidia
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./models:/app/models
+      - ./data:/app/data
+    command: python3 flask_api_full.py
+    restart: unless-stopped
+
+  medai-admin:
+    build: .
+    container_name: medai_admin_dashboard
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data/sqlite:/app/database
+    command: python3 src/pipeline/analytics_engine.py
+    restart: unless-stopped
+
+  medai-dicom-listener:
+    build: .
+    container_name: medai_dicom_router
+    ports:
+      - "4242:4242" 
+    volumes:
+      - ./data/dicom_incoming:/app/dicom_incoming
+    command: python3 dicom_listener.py
+    restart: unless-stopped

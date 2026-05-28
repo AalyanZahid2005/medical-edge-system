@@ -39,11 +39,10 @@ try:
     import pydicom
     from pydicom.dataset import Dataset
     from pynetdicom import AE, evt, AllStoragePresentationContexts
-    from pynetdicom.sop_class import Verification
-except ImportError:
-    print("[ERROR] Missing dependencies. Run: pip install pynetdicom pydicom requests")
+    from pynetdicom.sop_class import VerificationSOPClass
+except Exception as e:
+    print(f"REAL ERROR: {e}")
     sys.exit(1)
-
 # ── Local project import ───────────────────────────────────────────────────────
 try:
     from db_manager import DatabaseManager
@@ -329,7 +328,7 @@ def start_listener(host: str, port: int, output_dir: str):
     ae.supported_contexts = AllStoragePresentationContexts
 
     # Also accept C-ECHO (Verification) — lets Orthanc do a "ping" test
-    ae.add_supported_context(Verification)
+    ae.add_supported_context(VerificationSOPClass)
 
     # ── Register event handler ────────────────────────────────────────────────
     handlers = [

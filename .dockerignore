@@ -1,0 +1,12 @@
+venv/
+.git/
+__pycache__/
+Final_Defense_Assets/
+research_and_benchmarks/
+docs/
+*.pdf
+*.png
+*.html
+*.md
+**/*.pdf
+**/*.png

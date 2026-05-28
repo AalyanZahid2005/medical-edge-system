@@ -1,0 +1,17 @@
+# Web & API
+Pillow==8.4.0
+Flask<=2.0.3
+Werkzeug<=2.0.3
+requests<=2.27.1
+
+# Medical & Data
+pydicom
+fhirclient
+# scikit-learn
+timm
+onnx==1.10.2
+protobuf==3.19.6
+
+# Hardware & Voice
+pyttsx3
+

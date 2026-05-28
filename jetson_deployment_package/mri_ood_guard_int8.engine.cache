@@ -1,0 +1,21 @@
+TRT-8201-EntropyCalibration2
+input: 3c9ceab5
+/encoder/encoder.0/Conv_output_0: 3db3b3bb
+/encoder/encoder.2/LeakyRelu_output_0: 3db07d44
+/encoder/encoder.3/Conv_output_0: 3e70fb3b
+/encoder/encoder.5/LeakyRelu_output_0: 3e70fb3b
+/encoder/encoder.6/Conv_output_0: 3ecece6a
+/encoder/encoder.8/LeakyRelu_output_0: 3ecdfc61
+/encoder/encoder.9/Conv_output_0: 3f0f121a
+/encoder/encoder.11/LeakyRelu_output_0: 3f0ea675
+/decoder/decoder.0/ConvTranspose_output_0: 3f363135
+/decoder/decoder.1/BatchNormalization_output_0: 3f5b8c0b
+/decoder/decoder.2/LeakyRelu_output_0: 3f19eb68
+/decoder/decoder.3/ConvTranspose_output_0: 3f5fd928
+/decoder/decoder.4/BatchNormalization_output_0: 3f8a6085
+/decoder/decoder.5/LeakyRelu_output_0: 3f209598
+/decoder/decoder.6/ConvTranspose_output_0: 3efaf25f
+/decoder/decoder.7/BatchNormalization_output_0: 3f3e5c3e
+/decoder/decoder.8/LeakyRelu_output_0: 3f3b7886
+/decoder/decoder.9/ConvTranspose_output_0: 3f8499a1
+output: 3c010a14

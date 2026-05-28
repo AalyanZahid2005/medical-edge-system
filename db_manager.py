@@ -213,7 +213,7 @@ class DatabaseManager:
                 conn.execute(s)
         conn.commit()
         self._close(conn)
-        print(f"[DB] Ready → {self.db_path}")
+        print(f"[DB] Ready -> {self.db_path}")
 
     def _log(self, level: str, component: str, message: str):
         try:
