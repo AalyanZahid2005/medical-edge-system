@@ -258,9 +258,33 @@ def analyze():
     if STUB_MODE:
         inf = _stub_inference(modality)
     else:
-        # Day 7+: real TRT pipeline → mc_dropout_head → CAM
-        # M1 wires pipeline_skeleton here; M3 just calls the shared dict
-        inf = _stub_inference(modality)   # placeholder until M1 wires Stage 2
+        # 1. Grab the image file Ahmed forgot to parse
+        file = request.files.get("file")
+        if not file:
+            return jsonify({"status": "error", "message": "No file uploaded!"}), 400
+            
+        file_path = f"/tmp/{study_uid}.jpg"
+        file.save(file_path)
+
+        # 2. Load Hamid's Phase 5 Pipeline (Cached to protect memory)
+        if "real_pipeline" not in app.config:
+            import src.pipeline.master_pipeline_v2 as mp2
+            # Dynamically grab Hamid's class
+            PipelineClass = next(attr for name, attr in vars(mp2).items() if isinstance(attr, type) and "Pipeline" in name)
+            app.config["real_pipeline"] = PipelineClass()
+            
+        # 3. Convert image to PyTorch Tensor
+        from PIL import Image
+        import torchvision.transforms as T
+        img_tensor = T.ToTensor()(Image.open(file_path).convert("RGB")).unsqueeze(0)
+        
+        # 4. Fire the true TensorRT GPU inference!
+        inf = app.config["real_pipeline"].process_scan(
+            patient_id=patient_id, 
+            image_tensor=img_tensor, 
+            class_names=STUB_CLASSES.get(modality, ["Abnormal", "Normal"]), 
+            modality_name=modality
+        )
 
     predicted   = inf["predicted_class"]
     confidence  = inf["mean_confidence"]

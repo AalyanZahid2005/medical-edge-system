@@ -32,4 +32,5 @@ COPY . .
 EXPOSE 5000 8080 4242
 
 # Default command (overridden by docker-compose)
-CMD ["python3", "flask_api_full.py"]
+CMD ["python3", "flask_api_full.py", "--no-stub"]
+

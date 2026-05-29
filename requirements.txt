@@ -15,3 +15,5 @@ protobuf==3.19.6
 # Hardware & Voice
 pyttsx3
 
+arabic-reshaper
+python-bidi
