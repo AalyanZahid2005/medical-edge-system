@@ -5,6 +5,7 @@ MODEL_REGISTRY = {
         "enabled": True,
         "engine_path": "./jetson_deployment_package/brain_mri_fp16.engine",
         "ood_path": "./jetson_deployment_package/mri_ood_guard.onnx",
+        "ood_threshold": 0.002,
         "class_names": ["Glioma", "Meningioma", "No Tumor", "Pituitary"],
         "display_name": "Brain MRI"
     },

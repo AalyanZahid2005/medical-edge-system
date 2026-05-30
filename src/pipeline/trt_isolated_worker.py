@@ -90,7 +90,8 @@ def main():
 
         ood_result = {"ood_flag": False, "mse": 0.0}
         if cfg.get("ood_exists"):
-            guard = OODSecurityGuard(cfg["ood_path"], threshold=0.08)
+            ood_threshold = float(cfg.get("ood_threshold", 0.08))
+            guard = OODSecurityGuard(cfg["ood_path"], threshold=ood_threshold)
             ood_result = guard.check_scan_validity(image_tensor)
 
             if ood_result.get("ood_flag", False):

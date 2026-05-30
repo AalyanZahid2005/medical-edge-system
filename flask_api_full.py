@@ -126,6 +126,62 @@ FUSION_RISK_MAP = {
 app = Flask(__name__)
 
 # ============================================================
+# FINAL JSON GUARD: OOD rejection response cleaner
+# Ensures OOD cases return status=rejected, not status=ok.
+# ============================================================
+@app.after_request
+def final_ood_json_guard(response):
+    try:
+        if request.path != "/analyze":
+            return response
+
+        if not response.is_json:
+            return response
+
+        data = response.get_json(silent=True)
+        if not isinstance(data, dict):
+            return response
+
+        pred_obj = data.get("prediction", {})
+        pred_class = ""
+
+        if isinstance(pred_obj, dict):
+            pred_class = str(pred_obj.get("class", ""))
+        else:
+            pred_class = str(data.get("predicted_class", ""))
+
+        is_ood = bool(data.get("ood_flag", False)) or pred_class in [
+            "UNKNOWN_PATHOLOGY",
+            "OOD_REJECTED",
+            "WORKER_ERROR"
+        ]
+
+        # Do not override modality mismatch wording; that guard handles mismatch.
+        if not is_ood or bool(data.get("modality_mismatch", False)):
+            return response
+
+        data["status"] = "rejected"
+        data["ood_flag"] = True
+        data["routing_tier"] = 3
+        data["routing_decision"] = "Tier 3: Rejected / OOD Review"
+        data["risk_tier"] = "Rejected / OOD Review"
+        data["gpio_alert_type"] = "RED"
+        data["gpio_triggered"] = 1
+        data["manual_review_required"] = True
+        data["auto_report_allowed"] = False
+        data["routing_reason"] = "Out-of-distribution or rejected scan requires manual review."
+
+        response.set_data(json.dumps(data))
+        response.headers["Content-Type"] = "application/json"
+        response.headers["Content-Length"] = len(response.get_data())
+
+    except Exception as e:
+        print("[FINAL OOD GUARD WARNING]", str(e))
+
+    return response
+
+
+# ============================================================
 # FINAL JSON GUARD: modality mismatch response cleaner
 # Registered early so it runs late in Flask after_request order.
 # ============================================================
