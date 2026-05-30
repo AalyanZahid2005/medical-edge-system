@@ -636,3 +636,59 @@ if __name__ == "__main__":
     print("[OK] Tables:")
     for t in tables:
         print(" -", t)
+# ============================================================
+# Compatibility wrapper for master_pipeline_v2.py
+# master_pipeline_v2.py expects:
+# db_manager.insert_record(patient_id, pred_name, report, conf_pct, routing)
+# ============================================================
+
+def insert_record(patient_id, diagnosis, report, confidence, routing):
+    """
+    Simple safe database insert used by master_pipeline_v2.py.
+
+    This wrapper prevents /analyze from crashing and stores the
+    inference result in fyp_medical.db.
+    """
+    import sqlite3
+    from datetime import datetime
+
+    db_path = "fyp_medical.db"
+
+    try:
+        conn = sqlite3.connect(db_path)
+        cur = conn.cursor()
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS inference_records (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                patient_id TEXT,
+                diagnosis TEXT,
+                report TEXT,
+                confidence REAL,
+                routing TEXT,
+                created_at TEXT
+            )
+        """)
+
+        cur.execute("""
+            INSERT INTO inference_records
+            (patient_id, diagnosis, report, confidence, routing, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (
+            str(patient_id),
+            str(diagnosis),
+            str(report),
+            float(confidence) if confidence is not None else 0.0,
+            str(routing),
+            datetime.now().isoformat()
+        ))
+
+        conn.commit()
+        conn.close()
+
+        print("[DB] Inference record inserted successfully")
+        return True
+
+    except Exception as e:
+        print("[DB WARNING] insert_record failed:", str(e))
+        return False

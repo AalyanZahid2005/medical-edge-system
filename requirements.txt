@@ -15,5 +15,6 @@ protobuf==3.19.6
 # Hardware & Voice
 pyttsx3
 
-arabic-reshaper
-python-bidi
+arabic-reshaper==2.1.3
+python-bidi==0.4.2
+onnxruntime==1.10.0

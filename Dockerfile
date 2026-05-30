@@ -21,7 +21,8 @@ RUN apt-get update && apt-get install -y protobuf-compiler libprotobuf-dev && rm
 
 # Install Python dependencies
 COPY requirements.txt .
-RUN pip3 install --no-cache-dir -r requirements.txt
+RUN python3 -m pip install --upgrade pip
+RUN pip3 install --default-timeout=1000 -r requirements.txt
 
 RUN pip3 install --no-cache-dir pynetdicom==1.5.7
 

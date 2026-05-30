@@ -14,3 +14,16 @@ production_weights/
 # Ignore Python Cache
 __pycache__/
 *.pyc
+# Local Jetson backups / generated recovery files
+*.bak
+*.backup
+*.tar.gz
+*.pyc
+__pycache__/
+*.before_*
+*.before*
+*.working*
+*.confidence_bak
+*.routing_bak
+*.safe_modality_bak
+*.after_request_routing_bak

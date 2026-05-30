@@ -36,6 +36,7 @@ Install:
 import os
 import sys
 import json
+import re
 import time
 import random
 import argparse
@@ -89,8 +90,7 @@ except ImportError:
 # ══════════════════════════════════════════════════════════════════════════════
 #  CONFIGURATION
 # ══════════════════════════════════════════════════════════════════════════════
-
-STUB_MODE    = True    # Flip False on Day 7 (--no-stub)
+STUB_MODE    = False   # Flip False on Day 7 (--no-stub)
 FLASK_HOST   = "0.0.0.0"
 FLASK_PORT   = 5000
 FLASK_DEBUG  = False
@@ -124,6 +124,140 @@ FUSION_RISK_MAP = {
 # ══════════════════════════════════════════════════════════════════════════════
 
 app = Flask(__name__)
+
+# ============================================================
+# FINAL JSON GUARD: modality mismatch response cleaner
+# Registered early so it runs late in Flask after_request order.
+# ============================================================
+@app.after_request
+def final_modality_mismatch_json_guard(response):
+    try:
+        if request.path != "/analyze":
+            return response
+
+        if not response.is_json:
+            return response
+
+        data = response.get_json(silent=True)
+        if not isinstance(data, dict):
+            return response
+
+        pred_obj = data.get("prediction", {})
+        pred_class = ""
+
+        if isinstance(pred_obj, dict):
+            pred_class = str(pred_obj.get("class", ""))
+        else:
+            pred_class = str(data.get("predicted_class", ""))
+
+        if pred_class != "MODALITY_MISMATCH" and not bool(data.get("modality_mismatch", False)):
+            return response
+
+        selected = str(data.get("modality", data.get("selected_modality", "")))
+
+        # If pipeline did not expose detected_modality, infer from the report text.
+        report_text = (
+            str(data.get("llm_report", "")) + " " +
+            str(data.get("clinical_report", "")) + " " +
+            str(data.get("report", ""))
+        )
+
+        detected = data.get("detected_modality")
+        if not detected:
+            import re
+            m = re.search(r"closest to ['\\\"]([^'\\\"]+)['\\\"]", report_text)
+            detected = m.group(1) if m else "brain_mri"
+
+        data["status"] = "rejected"
+        data["ood_flag"] = True
+        data["modality_mismatch"] = True
+        data["selected_modality"] = selected
+        data["detected_modality"] = detected
+
+        data["routing_tier"] = 3
+        data["routing_decision"] = "Tier 3: Modality Mismatch / Manual Review"
+        data["risk_tier"] = "Rejected / Wrong Modality"
+        data["gpio_alert_type"] = "RED"
+        data["gpio_triggered"] = 1
+        data["manual_review_required"] = True
+        data["auto_report_allowed"] = False
+        data["routing_reason"] = (
+            "Selected modality does not match uploaded image. "
+            "Selected: {}. Detected: {}."
+        ).format(selected, detected)
+
+        response.set_data(json.dumps(data))
+        response.headers["Content-Type"] = "application/json"
+        response.headers["Content-Length"] = len(response.get_data())
+
+    except Exception as e:
+        print("[FINAL MISMATCH GUARD WARNING]", str(e))
+
+    return response
+
+
+
+# ============================================================
+# Final response safety hook for /analyze routing metadata
+# Ensures API output always exposes full clinical routing proof.
+# ============================================================
+@app.after_request
+def inject_routing_metadata(response):
+    try:
+        if request.path != "/analyze":
+            return response
+
+        if not response.is_json:
+            return response
+
+        data = response.get_json(silent=True)
+        if not isinstance(data, dict):
+            return response
+
+        if "routing_tier" not in data:
+            return response
+
+        tier = int(data.get("routing_tier", 3))
+
+        if tier == 1:
+            routing_decision = "Tier 1: Auto-SR"
+            risk_tier = "High Confidence / Auto-SR"
+            gpio_alert_type = "GREEN"
+            manual_review_required = False
+            auto_report_allowed = True
+            routing_reason = "Confidence is >= 90%."
+        elif tier == 2:
+            routing_decision = "Tier 2: AI-Assisted Review"
+            risk_tier = "Medium Confidence / Doctor Review"
+            gpio_alert_type = "YELLOW"
+            manual_review_required = True
+            auto_report_allowed = True
+            routing_reason = "Confidence is between 70% and 90%."
+        else:
+            routing_decision = "Tier 3: Urgent Manual Review"
+            risk_tier = "Low Confidence / Urgent Review"
+            gpio_alert_type = "RED"
+            manual_review_required = True
+            auto_report_allowed = False
+            routing_reason = "Confidence is below 70% or scan requires urgent review."
+
+        data["routing_decision"] = data.get("routing_decision", routing_decision)
+        data["risk_tier"] = data.get("risk_tier", risk_tier)
+        data["manual_review_required"] = bool(data.get("manual_review_required", manual_review_required))
+        data["auto_report_allowed"] = bool(data.get("auto_report_allowed", auto_report_allowed))
+        data["routing_reason"] = data.get("routing_reason", routing_reason)
+        data["gpio_alert_type"] = data.get("gpio_alert_type", gpio_alert_type)
+        data["gpio_triggered"] = int(data.get("gpio_triggered", 1))
+
+        response.set_data(json.dumps(data))
+        response.headers["Content-Type"] = "application/json"
+        response.headers["Content-Length"] = len(response.get_data())
+
+    except Exception as e:
+        print("[ROUTING HOOK WARNING]", str(e))
+
+    return response
+
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024
 
 if WEBSOCKET_AVAILABLE:
@@ -267,12 +401,14 @@ def analyze():
         file.save(file_path)
 
         # 2. Load Hamid's Phase 5 Pipeline (Cached to protect memory)
+# 2. Load Hamid's Phase 5 Pipeline (Cached to protect memory)
         if "real_pipeline" not in app.config:
+            import sys
+            sys.path.append("./src/pipeline")
             import src.pipeline.master_pipeline_v2 as mp2
             # Dynamically grab Hamid's class
             PipelineClass = next(attr for name, attr in vars(mp2).items() if isinstance(attr, type) and "Pipeline" in name)
-            app.config["real_pipeline"] = PipelineClass()
-            
+            app.config["real_pipeline"] = PipelineClass()            
         # 3. Convert image to PyTorch Tensor
         from PIL import Image
         import torchvision.transforms as T
@@ -307,6 +443,11 @@ def analyze():
                 "mean_confidence":         confidence,
                 "uncertainty_percent":     uncertainty,
                 "routing_tier":            tier,
+                "routing_decision": inf.get("routing_decision", inf.get("routing", "")),
+                "risk_tier": inf.get("risk_tier", ""),
+                "manual_review_required": bool(inf.get("manual_review_required", routing_tier == 3)),
+                "auto_report_allowed": bool(inf.get("auto_report_allowed", routing_tier in [1, 2])),
+                "routing_reason": inf.get("routing_reason", ""),
                 "mc_mean_probs":           json.dumps(inf.get("mc_mean_probs", [])),
                 "mc_std_probs":            json.dumps(inf.get("mc_std_probs", [])),
                 "num_mc_passes":           inf.get("num_mc_passes", 20),
@@ -797,6 +938,153 @@ def run_self_test():
 # ══════════════════════════════════════════════════════════════════════════════
 #  ENTRY POINT
 # ══════════════════════════════════════════════════════════════════════════════
+
+
+
+# ============================================================
+# Final routing correction hook
+# Always recomputes routing from final prediction confidence.
+# This prevents mismatch like 99% confidence but Tier 3.
+# ============================================================
+@app.after_request
+def force_routing_from_prediction_confidence(response):
+    try:
+        if request.path != "/analyze":
+            return response
+
+        if not response.is_json:
+            return response
+
+        data = response.get_json(silent=True)
+        if not isinstance(data, dict):
+            return response
+
+        # Preserve explicit modality mismatch rejection from pipeline
+        pred_check = data.get("prediction", {})
+        pred_class_check = ""
+        if isinstance(pred_check, dict):
+            pred_class_check = str(pred_check.get("class", ""))
+        else:
+            pred_class_check = str(data.get("predicted_class", ""))
+
+        if pred_class_check == "MODALITY_MISMATCH" or bool(data.get("modality_mismatch", False)):
+            data["routing_tier"] = 3
+            data["routing_decision"] = "Tier 3: Modality Mismatch / Manual Review"
+            data["risk_tier"] = "Rejected / Wrong Modality"
+            data["gpio_alert_type"] = "RED"
+            data["gpio_triggered"] = 1
+            data["manual_review_required"] = True
+            data["auto_report_allowed"] = False
+            data["routing_reason"] = data.get(
+                "routing_reason",
+                "Selected modality does not match uploaded image."
+            )
+
+            response.set_data(json.dumps(data))
+            response.headers["Content-Type"] = "application/json"
+            response.headers["Content-Length"] = len(response.get_data())
+            return response
+
+        pred = data.get("prediction", {})
+        if isinstance(pred, dict):
+            conf = float(pred.get("mean_confidence", data.get("mean_confidence", 0.0)))
+        else:
+            conf = float(data.get("mean_confidence", 0.0))
+
+        ood_flag = bool(data.get("ood_flag", False))
+
+        # Preserve modality mismatch as a rejected safety case
+        pred_obj = data.get("prediction", {})
+        pred_class = ""
+        if isinstance(pred_obj, dict):
+            pred_class = str(pred_obj.get("class", ""))
+        else:
+            pred_class = str(data.get("predicted_class", ""))
+
+        if pred_class == "MODALITY_MISMATCH" or bool(data.get("modality_mismatch", False)):
+            report_text = str(data.get("llm_report", "")) + " " + str(data.get("report", ""))
+            detected = data.get("detected_modality")
+
+            if not detected:
+                m = re.search(r"closest to ['\"]([^'\"]+)['\"]", report_text)
+                detected = m.group(1) if m else "unknown"
+
+            data["status"] = "rejected"
+            data["ood_flag"] = True
+            data["modality_mismatch"] = True
+            data["selected_modality"] = data.get("modality", "")
+            data["detected_modality"] = detected
+
+            data["routing_tier"] = 3
+            data["routing_decision"] = "Tier 3: Modality Mismatch / Manual Review"
+            data["risk_tier"] = "Rejected / Wrong Modality"
+            data["gpio_alert_type"] = "RED"
+            data["gpio_triggered"] = 1
+            data["manual_review_required"] = True
+            data["auto_report_allowed"] = False
+            data["routing_reason"] = (
+                "Selected modality does not match uploaded image."
+                if detected == "unknown"
+                else "Selected modality does not match uploaded image. Detected image type: {}.".format(detected)
+            )
+
+            response.set_data(json.dumps(data))
+            response.headers["Content-Type"] = "application/json"
+            response.headers["Content-Length"] = len(response.get_data())
+            return response
+
+        if ood_flag or str(data.get("status", "")).lower() == "rejected":
+            tier = 3
+            routing_decision = "Tier 3: Rejected / OOD Review"
+            risk_tier = "Rejected / OOD Review"
+            gpio_alert_type = "RED"
+            manual_review_required = True
+            auto_report_allowed = False
+            routing_reason = "Out-of-distribution or rejected scan requires manual review."
+        elif conf >= 90.0:
+            tier = 1
+            routing_decision = "Tier 1: Auto-SR"
+            risk_tier = "High Confidence / Auto-SR"
+            gpio_alert_type = "GREEN"
+            manual_review_required = False
+            auto_report_allowed = True
+            routing_reason = "Confidence is >= 90%."
+        elif conf >= 70.0:
+            tier = 2
+            routing_decision = "Tier 2: AI-Assisted Review"
+            risk_tier = "Medium Confidence / Doctor Review"
+            gpio_alert_type = "YELLOW"
+            manual_review_required = True
+            auto_report_allowed = True
+            routing_reason = "Confidence is between 70% and 90%."
+        else:
+            tier = 3
+            routing_decision = "Tier 3: Urgent Manual Review"
+            risk_tier = "Low Confidence / Urgent Review"
+            gpio_alert_type = "RED"
+            manual_review_required = True
+            auto_report_allowed = False
+            routing_reason = "Confidence is below 70% or scan requires urgent review."
+
+        data["routing_tier"] = tier
+        data["routing_decision"] = routing_decision
+        data["risk_tier"] = risk_tier
+        data["gpio_alert_type"] = gpio_alert_type
+        data["gpio_triggered"] = 1 if gpio_alert_type == "RED" else 0
+        data["manual_review_required"] = manual_review_required
+        data["auto_report_allowed"] = auto_report_allowed
+        data["routing_reason"] = routing_reason
+
+        response.set_data(json.dumps(data))
+        response.headers["Content-Type"] = "application/json"
+        response.headers["Content-Length"] = len(response.get_data())
+
+    except Exception as e:
+        print("[FORCE ROUTING HOOK WARNING]", str(e))
+
+    return response
+
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(

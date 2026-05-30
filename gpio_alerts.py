@@ -82,3 +82,65 @@ if __name__ == "__main__":
         print("\n[SYSTEM] Terminated.")
     finally:
         reset_hardware()
+# ============================================================
+# Compatibility wrappers for master_pipeline_v2.py
+# These prevent /analyze from crashing if GPIO hardware functions
+# are missing or running inside Docker/simulation mode.
+# ============================================================
+
+def trigger_success_led():
+    try:
+        print("[GPIO] SUCCESS LED triggered")
+        if "green_led_on" in globals():
+            green_led_on()
+        elif "trigger_green_led" in globals():
+            trigger_green_led()
+    except Exception as e:
+        print(f"[GPIO WARNING] trigger_success_led skipped: {e}")
+
+
+def trigger_warning_led():
+    try:
+        print("[GPIO] WARNING LED triggered")
+        if "yellow_led_on" in globals():
+            yellow_led_on()
+        elif "trigger_yellow_led" in globals():
+            trigger_yellow_led()
+    except Exception as e:
+        print(f"[GPIO WARNING] trigger_warning_led skipped: {e}")
+
+
+def trigger_emergency_alert():
+    try:
+        print("[GPIO] EMERGENCY ALERT triggered")
+        if "red_led_on" in globals():
+            red_led_on()
+        elif "trigger_red_led" in globals():
+            trigger_red_led()
+
+        if "buzzer_on" in globals():
+            buzzer_on()
+        elif "trigger_buzzer" in globals():
+            trigger_buzzer()
+    except Exception as e:
+        print(f"[GPIO WARNING] trigger_emergency_alert skipped: {e}")
+
+
+def trigger_error_led():
+    try:
+        print("[GPIO] ERROR LED triggered")
+        if "red_led_on" in globals():
+            red_led_on()
+        elif "trigger_red_led" in globals():
+            trigger_red_led()
+    except Exception as e:
+        print(f"[GPIO WARNING] trigger_error_led skipped: {e}")
+
+
+def cleanup_gpio():
+    try:
+        print("[GPIO] Cleanup called")
+        if "cleanup" in globals():
+            cleanup()
+    except Exception as e:
+        print(f"[GPIO WARNING] cleanup skipped: {e}")
