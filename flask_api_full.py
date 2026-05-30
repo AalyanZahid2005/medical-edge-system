@@ -36,6 +36,7 @@ Install:
 import os
 import sys
 import json
+import sqlite3
 import re
 import time
 import random
@@ -124,6 +125,79 @@ FUSION_RISK_MAP = {
 # ══════════════════════════════════════════════════════════════════════════════
 
 app = Flask(__name__)
+
+# ============================================================
+# FINAL JSON GUARD: fill real DB record_id in /analyze response
+# DB insert may succeed while older Flask formatter returns -1.
+# This guard reads the latest matching DB record and exposes it.
+# ============================================================
+@app.after_request
+def final_record_id_json_guard(response):
+    try:
+        if request.path != "/analyze":
+            return response
+
+        if not response.is_json:
+            return response
+
+        data = response.get_json(silent=True)
+        if not isinstance(data, dict):
+            return response
+
+        current_rid = data.get("record_id", -1)
+        try:
+            current_rid = int(current_rid)
+        except Exception:
+            current_rid = -1
+
+        if current_rid > 0:
+            return response
+
+        patient_id = request.form.get("patient_id") or data.get("patient_id")
+        modality = request.form.get("modality") or data.get("modality")
+
+        if not patient_id:
+            return response
+
+        db_path = "/app/fyp_medical.db"
+
+        conn = sqlite3.connect(db_path)
+        cur = conn.cursor()
+
+        if modality:
+            row = cur.execute("""
+                SELECT r.record_id
+                FROM inference_records r
+                JOIN dicom_studies s ON s.study_uid = r.study_uid
+                WHERE s.patient_id = ? AND r.modality = ?
+                ORDER BY r.record_id DESC
+                LIMIT 1
+            """, (str(patient_id), str(modality))).fetchone()
+        else:
+            row = cur.execute("""
+                SELECT r.record_id
+                FROM inference_records r
+                JOIN dicom_studies s ON s.study_uid = r.study_uid
+                WHERE s.patient_id = ?
+                ORDER BY r.record_id DESC
+                LIMIT 1
+            """, (str(patient_id),)).fetchone()
+
+        conn.close()
+
+        if row:
+            data["record_id"] = int(row[0])
+            data["patient_id"] = str(patient_id)
+
+            response.set_data(json.dumps(data))
+            response.headers["Content-Type"] = "application/json"
+            response.headers["Content-Length"] = len(response.get_data())
+
+    except Exception as e:
+        print("[FINAL RECORD ID GUARD WARNING]", str(e))
+
+    return response
+
 
 # ============================================================
 # FINAL JSON GUARD: OOD rejection response cleaner

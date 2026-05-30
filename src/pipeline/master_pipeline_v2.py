@@ -76,14 +76,21 @@ class MedicalEdgePipelineV2:
         except Exception as e:
             print("[GPIO WARNING] Emergency alert skipped: {}".format(e))
 
-    def _safe_db_insert(self, patient_id, pred_name, report, conf_pct, routing):
+    def _safe_db_insert(self, patient_id, pred_name, report, conf_pct, routing, **kwargs):
         try:
             if hasattr(db_manager, "insert_record"):
-                return db_manager.insert_record(patient_id, pred_name, report, conf_pct, routing)
-            return False
+                return db_manager.insert_record(
+                    patient_id,
+                    pred_name,
+                    report,
+                    conf_pct,
+                    routing,
+                    **kwargs
+                )
+            return -1
         except Exception as e:
             print("[DB WARNING] insert_record failed: {}".format(e))
-            return False
+            return -1
 
     def _decide_routing(self, conf_pct, ood_flag=False):
         try:
@@ -237,12 +244,30 @@ class MedicalEdgePipelineV2:
             ).format(selected, detected)
 
             self._safe_gpio_emergency()
-            self._safe_db_insert(patient_id, pred_name, report, conf_pct, routing_decision)
+            record_id = self._safe_db_insert(
+                patient_id,
+                pred_name,
+                report,
+                conf_pct,
+                routing_decision,
+                modality=selected,
+                uncertainty=uncertainty,
+                ood_flag=True,
+                gpio_alert_type=gpio_alert_type,
+                gpio_triggered=1,
+                pipeline_ms=int(total_time)
+            )
+            try:
+                record_id = int(record_id)
+            except Exception:
+                record_id = -1
 
             return {
                 "status": "REJECTED",
                 "api_status": "error",
                 "patient_id": str(patient_id),
+            "record_id": int(record_id),
+                "record_id": int(record_id),
                 "modality": selected,
                 "modality_display": selected,
 
@@ -333,7 +358,23 @@ class MedicalEdgePipelineV2:
                     route["routing_decision"]
                 )
 
-        self._safe_db_insert(patient_id, pred_name, report, conf_pct, route["routing_decision"])
+        record_id = self._safe_db_insert(
+            patient_id,
+            pred_name,
+            report,
+            conf_pct,
+            route["routing_decision"],
+            modality=modality_name,
+            uncertainty=uncertainty,
+            ood_flag=ood_flag,
+            gpio_alert_type=route["gpio_alert_type"],
+            gpio_triggered=1 if route["gpio_alert_type"] == "RED" else 0,
+            pipeline_ms=int(total_time)
+        )
+        try:
+            record_id = int(record_id)
+        except Exception:
+            record_id = -1
 
         self._safe_voice(
             "{} result for patient {}. Prediction {} with confidence {:.1f} percent.".format(

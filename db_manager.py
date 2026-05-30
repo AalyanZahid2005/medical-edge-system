@@ -642,53 +642,227 @@ if __name__ == "__main__":
 # db_manager.insert_record(patient_id, pred_name, report, conf_pct, routing)
 # ============================================================
 
-def insert_record(patient_id, diagnosis, report, confidence, routing):
-    """
-    Simple safe database insert used by master_pipeline_v2.py.
 
-    This wrapper prevents /analyze from crashing and stores the
-    inference result in fyp_medical.db.
+def insert_record(patient_id, diagnosis=None, report=None, confidence=0.0, routing="N/A", **kwargs):
     """
+    Final compatibility wrapper used by Flask/master_pipeline_v2.
+
+    Fix:
+    - Older wrapper tried inserting patient_id directly into inference_records.
+    - Current schema stores patient_id in dicom_studies and links inference_records by study_uid.
+    - This function creates/links patient + study, inserts inference record, and returns a real record_id.
+    """
+    import os
     import sqlite3
-    from datetime import datetime
+    import time
+    import uuid
+    import json
 
-    db_path = "fyp_medical.db"
+    # Support dict-style call too.
+    if isinstance(patient_id, dict):
+        rec = patient_id
+        patient_id = rec.get("patient_id") or rec.get("patient") or "PT-UNKNOWN"
+        diagnosis = rec.get("predicted_class") or rec.get("diagnosis") or rec.get("prediction") or diagnosis or "UNKNOWN"
+        report = rec.get("llm_report") or rec.get("report") or rec.get("clinical_report") or report or ""
+        confidence = rec.get("mean_confidence") or rec.get("confidence") or rec.get("confidence_percent") or confidence or 0.0
+        routing = rec.get("routing_decision") or rec.get("routing") or rec.get("routing_tier") or routing or "N/A"
+        modality = rec.get("modality") or kwargs.get("modality") or "unknown"
+        uncertainty = rec.get("uncertainty") or rec.get("uncertainty_percent") or rec.get("std_dev") or 0.0
+        ood_flag = rec.get("ood_flag", False)
+        gpio_alert_type = rec.get("gpio_alert_type", "NONE")
+        gpio_triggered = rec.get("gpio_triggered", 0)
+        pipeline_ms = rec.get("pipeline_ms") or rec.get("latency_ms")
+    else:
+        patient_id = patient_id or "PT-UNKNOWN"
+        diagnosis = diagnosis or "UNKNOWN"
+        report = report or ""
+        modality = kwargs.get("modality", "unknown")
+        uncertainty = kwargs.get("uncertainty", kwargs.get("uncertainty_percent", 0.0))
+        ood_flag = kwargs.get("ood_flag", False)
+        gpio_alert_type = kwargs.get("gpio_alert_type", "NONE")
+        gpio_triggered = kwargs.get("gpio_triggered", 0)
+        pipeline_ms = kwargs.get("pipeline_ms")
+
+    try:
+        confidence = float(confidence or 0.0)
+    except Exception:
+        confidence = 0.0
+
+    try:
+        uncertainty = float(uncertainty or 0.0)
+    except Exception:
+        uncertainty = 0.0
+
+    # Normalize routing tier for DB schema:
+    # inference_records.routing_tier is INTEGER CHECK(routing_tier IN (1,2,3))
+    routing_text = str(routing or "")
+    if "Tier 1" in routing_text or "Auto-SR" in routing_text:
+        routing_tier_value = 1
+    elif "Tier 2" in routing_text or "AI-Assisted" in routing_text:
+        routing_tier_value = 2
+    elif "Tier 3" in routing_text or "Urgent" in routing_text or "Rejected" in routing_text:
+        routing_tier_value = 3
+    else:
+        if confidence >= 90.0:
+            routing_tier_value = 1
+        elif confidence >= 70.0:
+            routing_tier_value = 2
+        else:
+            routing_tier_value = 3
+
+    # Normalize GPIO alert.
+    # We will migrate DB to allow YELLOW too.
+    gpio_alert_type = str(gpio_alert_type or "NONE").upper()
+    if gpio_alert_type not in ("GREEN", "YELLOW", "RED", "NONE"):
+        gpio_alert_type = "NONE"
+
+    db_path = (
+        os.environ.get("MEDAI_DB_PATH")
+        or os.environ.get("DB_PATH")
+        or ("/app/fyp_medical.db" if os.path.exists("/app") else "fyp_medical.db")
+    )
+
+    study_uid = kwargs.get("study_uid") or "STUDY-{}-{}".format(
+        int(time.time() * 1000),
+        uuid.uuid4().hex[:8]
+    )
 
     try:
         conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
         cur = conn.cursor()
 
+        cur.execute("PRAGMA foreign_keys = ON")
+
+        # Ensure minimum schema exists. CREATE IF NOT EXISTS will not damage existing tables.
         cur.execute("""
-            CREATE TABLE IF NOT EXISTS inference_records (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                patient_id TEXT,
-                diagnosis TEXT,
-                report TEXT,
-                confidence REAL,
-                routing TEXT,
-                created_at TEXT
+            CREATE TABLE IF NOT EXISTS patients (
+                patient_id TEXT PRIMARY KEY,
+                patient_name TEXT,
+                date_of_birth TEXT,
+                sex TEXT DEFAULT 'U'
             )
         """)
 
         cur.execute("""
-            INSERT INTO inference_records
-            (patient_id, diagnosis, report, confidence, routing, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (
-            str(patient_id),
-            str(diagnosis),
-            str(report),
-            float(confidence) if confidence is not None else 0.0,
-            str(routing),
-            datetime.now().isoformat()
-        ))
+            CREATE TABLE IF NOT EXISTS dicom_studies (
+                study_uid TEXT PRIMARY KEY,
+                patient_id TEXT NOT NULL,
+                modality TEXT,
+                dicom_file_path TEXT,
+                study_date TEXT,
+                study_time TEXT,
+                description TEXT,
+                created_at DATETIME DEFAULT (datetime('now')),
+                FOREIGN KEY (patient_id) REFERENCES patients(patient_id)
+            )
+        """)
 
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS inference_records (
+                record_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                study_uid TEXT,
+                modality TEXT,
+                predicted_class TEXT,
+                mean_confidence REAL,
+                uncertainty_percent REAL,
+                routing_tier TEXT,
+                mc_mean_probs TEXT,
+                mc_std_probs TEXT,
+                num_mc_passes INTEGER,
+                logits_raw TEXT,
+                features_shape TEXT,
+                ood_flag INTEGER DEFAULT 0,
+                ood_reconstruction_error REAL,
+                llm_report TEXT,
+                gradcam_base64 TEXT,
+                gradcam_file_path TEXT,
+                gpio_triggered INTEGER DEFAULT 0,
+                gpio_alert_type TEXT DEFAULT 'NONE',
+                pipeline_ms INTEGER,
+                inferred_at DATETIME DEFAULT (datetime('now')),
+                FOREIGN KEY (study_uid) REFERENCES dicom_studies(study_uid)
+            )
+        """)
+
+        cur.execute(
+            "INSERT OR IGNORE INTO patients (patient_id, patient_name, sex) VALUES (?, ?, ?)",
+            (str(patient_id), str(patient_id), "U")
+        )
+
+        cur.execute(
+            """
+            INSERT OR IGNORE INTO dicom_studies
+                (study_uid, patient_id, modality, description)
+            VALUES (?, ?, ?, ?)
+            """,
+            (study_uid, str(patient_id), str(modality), "API inference upload")
+        )
+
+        # Dynamic insert: only use columns that exist in the actual DB table.
+        table_cols = [
+            row["name"]
+            for row in cur.execute("PRAGMA table_info(inference_records)").fetchall()
+        ]
+        table_cols_set = set(table_cols)
+
+        candidate = {
+            "study_uid": study_uid,
+            "patient_id": str(patient_id),  # used only if legacy table has this column
+            "modality": str(modality),
+            "predicted_class": str(diagnosis),
+            "diagnosis": str(diagnosis),    # used only if legacy table has this column
+            "mean_confidence": confidence,
+            "confidence": confidence,       # used only if legacy table has this column
+            "uncertainty_percent": uncertainty,
+            "routing_tier": int(routing_tier_value),
+            "routing": str(routing),        # used only if legacy table has this column
+            "mc_mean_probs": json.dumps(kwargs.get("mc_mean_probs", [])),
+            "mc_std_probs": json.dumps(kwargs.get("mc_std_probs", [])),
+            "num_mc_passes": int(kwargs.get("num_mc_passes", 0) or 0),
+            "logits_raw": json.dumps(kwargs.get("logits_raw", [])),
+            "features_shape": json.dumps(kwargs.get("features_shape", [])),
+            "ood_flag": 1 if bool(ood_flag) else 0,
+            "ood_reconstruction_error": kwargs.get("ood_reconstruction_error", kwargs.get("mse", None)),
+            "llm_report": str(report),
+            "full_report": str(report),     # used only if legacy table has this column
+            "gradcam_base64": kwargs.get("gradcam_base64"),
+            "gradcam_file_path": kwargs.get("gradcam_file_path"),
+            "gpio_triggered": int(gpio_triggered or 0),
+            "gpio_alert_type": str(gpio_alert_type or "NONE"),
+            "pipeline_ms": pipeline_ms,
+        }
+
+        insert_cols = [
+            c for c in candidate.keys()
+            if c in table_cols_set and c not in ("record_id", "inferred_at")
+        ]
+
+        if not insert_cols:
+            raise sqlite3.Error("No compatible columns found in inference_records.")
+
+        placeholders = ",".join(["?"] * len(insert_cols))
+        sql = "INSERT INTO inference_records ({}) VALUES ({})".format(
+            ",".join(insert_cols),
+            placeholders
+        )
+
+        values = [candidate[c] for c in insert_cols]
+        cur.execute(sql, values)
+
+        record_id = int(cur.lastrowid)
         conn.commit()
         conn.close()
 
-        print("[DB] Inference record inserted successfully")
-        return True
+        print("[DB] Inserted inference record:", record_id)
+        return record_id
 
     except Exception as e:
-        print("[DB WARNING] insert_record failed:", str(e))
-        return False
+        try:
+            conn.rollback()
+            conn.close()
+        except Exception:
+            pass
+        print("[DB WARNING] insert_record failed:", e)
+        return -1
+
