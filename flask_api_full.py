@@ -1216,6 +1216,129 @@ def force_routing_from_prediction_confidence(response):
 
 
 
+
+
+# ============================================================
+# FINAL HISTORY ENDPOINT
+# Reads persisted inference records from /app/fyp_medical.db
+# Supports:
+#   /history
+#   /history?patient_id=PT-XXX
+#   /history?limit=20
+# ============================================================
+@app.route("/history", methods=["GET"])
+def history_endpoint_final():
+    try:
+        patient_id = request.args.get("patient_id")
+        limit_raw = request.args.get("limit", "20")
+
+        try:
+            limit = int(limit_raw)
+        except Exception:
+            limit = 20
+
+        if limit < 1:
+            limit = 20
+        if limit > 100:
+            limit = 100
+
+        db_path = "/app/fyp_medical.db"
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+
+        base_sql = """
+            SELECT
+                r.record_id,
+                s.patient_id,
+                r.study_uid,
+                r.modality,
+                r.predicted_class,
+                r.mean_confidence,
+                r.uncertainty_percent,
+                r.routing_tier,
+                r.ood_flag,
+                r.ood_reconstruction_error,
+                r.llm_report,
+                r.gpio_triggered,
+                r.gpio_alert_type,
+                r.pipeline_ms,
+                r.inferred_at
+            FROM inference_records r
+            LEFT JOIN dicom_studies s ON s.study_uid = r.study_uid
+        """
+
+        params = []
+
+        if patient_id:
+            base_sql += " WHERE s.patient_id = ? "
+            params.append(str(patient_id))
+
+        base_sql += " ORDER BY r.record_id DESC LIMIT ? "
+        params.append(limit)
+
+        rows = cur.execute(base_sql, params).fetchall()
+        conn.close()
+
+        records = []
+        for row in rows:
+            routing_tier = row["routing_tier"]
+
+            if routing_tier == 1:
+                routing_decision = "Tier 1: Auto-SR"
+                risk_tier = "High Confidence / Auto-SR"
+            elif routing_tier == 2:
+                routing_decision = "Tier 2: AI-Assisted Review"
+                risk_tier = "Medium Confidence / Doctor Review"
+            else:
+                routing_decision = "Tier 3: Urgent Manual Review"
+                risk_tier = "Low Confidence / Urgent Review"
+
+            records.append({
+                "record_id": row["record_id"],
+                "patient_id": row["patient_id"],
+                "study_uid": row["study_uid"],
+                "modality": row["modality"],
+                "prediction": {
+                    "class": row["predicted_class"],
+                    "mean_confidence": row["mean_confidence"],
+                    "uncertainty": row["uncertainty_percent"]
+                },
+                "routing_tier": row["routing_tier"],
+                "routing_decision": routing_decision,
+                "risk_tier": risk_tier,
+                "ood_flag": bool(row["ood_flag"]),
+                "ood_reconstruction_error": row["ood_reconstruction_error"],
+                "gpio_triggered": row["gpio_triggered"],
+                "gpio_alert_type": row["gpio_alert_type"],
+                "pipeline_ms": row["pipeline_ms"],
+                "llm_report": row["llm_report"],
+                "inferred_at": row["inferred_at"]
+            })
+
+        return app.response_class(
+            response=json.dumps({
+                "status": "ok",
+                "count": len(records),
+                "patient_id": patient_id,
+                "records": records
+            }),
+            status=200,
+            mimetype="application/json"
+        )
+
+    except Exception as e:
+        return app.response_class(
+            response=json.dumps({
+                "status": "error",
+                "message": str(e)
+            }),
+            status=500,
+            mimetype="application/json"
+        )
+
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Flask API Full — FYP Medical Imaging (M3 Days 5-20)"
