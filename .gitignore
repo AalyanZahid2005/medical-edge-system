@@ -27,3 +27,11 @@ __pycache__/
 *.routing_bak
 *.safe_modality_bak
 *.after_request_routing_bak
+
+# Extra local backup patterns
+*_bak
+*_bak2
+*_bak*
+*.db
+/master_pipeline_v2.py
+/web_demo/app.py
