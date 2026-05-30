@@ -41,7 +41,7 @@ MODEL_REGISTRY = {
         "enabled": True,
         "engine_path": "./jetson_deployment_package/skin_lesion_fp16.engine",
         "ood_path": "./jetson_deployment_package/skin_ood_guard.onnx",
-        "class_names": ["NV", "MEL", "BCC", "AKIEC", "BKL", "DF", "VASC"],
+        "class_names": ["AKIEC", "BCC", "BKL", "DF", "MEL", "NV", "VASC"],
         "display_name": "Skin Lesion"
     }
 }
