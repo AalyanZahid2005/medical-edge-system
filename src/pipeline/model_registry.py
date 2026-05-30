@@ -19,7 +19,7 @@ MODEL_REGISTRY = {
         "enabled": True,
         "engine_path": "./jetson_deployment_package/bone_fracture_fp16.engine",
         "ood_path": "./jetson_deployment_package/bone_ood_guard.onnx",
-        "class_names": ["Normal", "Fracture"],
+        "class_names": ["Fracture", "Normal"],
         "display_name": "Bone X-ray"
     },
     "ecg": {
