@@ -18,21 +18,27 @@ if ! command -v docker >/dev/null 2>&1; then
     exit 1
 fi
 
-if docker ps -a --format '{{.Names}}' | grep -qx "medai_inference_core"; then
+DOCKER="docker"
+if ! docker ps >/dev/null 2>&1; then
+    DOCKER="sudo docker"
+fi
+
+echo "[INFO] Docker command mode: $DOCKER"
+
+if $DOCKER ps -a --format '{{.Names}}' | grep -qx "medai_inference_core"; then
     echo "[INFO] Starting existing container: medai_inference_core"
-    sudo docker start medai_inference_core >/dev/null || true
+    $DOCKER start medai_inference_core >/dev/null || true
 else
     echo "[INFO] Container medai_inference_core not found."
 
-    if docker compose version >/dev/null 2>&1; then
+    if $DOCKER compose version >/dev/null 2>&1; then
         echo "[INFO] Starting backend using docker compose..."
-        sudo docker compose up -d
+        $DOCKER compose up -d
     elif command -v docker-compose >/dev/null 2>&1; then
         echo "[INFO] Starting backend using docker-compose..."
         sudo docker-compose up -d
     else
         echo "[ERROR] No existing container and Docker Compose not available."
-        echo "Cannot start backend automatically."
         exit 1
     fi
 fi
@@ -50,5 +56,5 @@ done
 
 echo "[ERROR] Backend did not become healthy within timeout."
 echo "Recent logs:"
-sudo docker logs --tail=80 medai_inference_core || true
+$DOCKER logs --tail=80 medai_inference_core || true
 exit 1
