@@ -35,3 +35,7 @@ __pycache__/
 *.db
 /master_pipeline_v2.py
 /web_demo/app.py
+
+# Local GUI fonts and local GUI backup folders
+src/gui/*.ttf
+src/gui_before_m4_*/
