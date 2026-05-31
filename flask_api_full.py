@@ -1,3 +1,27 @@
+
+try:
+    import sys
+    if "/app/src/pipeline" not in sys.path:
+        sys.path.append("/app/src/pipeline")
+    if "src/pipeline" not in sys.path:
+        sys.path.append("src/pipeline")
+    from real_gradcam_explainer import generate_real_gradcam_base64
+except Exception as _real_gradcam_import_error:
+    print("[REAL GRADCAM IMPORT WARNING]", _real_gradcam_import_error)
+    generate_real_gradcam_base64 = None
+
+
+try:
+    import sys
+    if "/app/src/pipeline" not in sys.path:
+        sys.path.append("/app/src/pipeline")
+    if "src/pipeline" not in sys.path:
+        sys.path.append("src/pipeline")
+    from lightweight_explainer import generate_lightweight_heatmap_base64
+except Exception as _explainer_import_error:
+    print("[LIGHTWEIGHT EXPLAINER IMPORT WARNING]", _explainer_import_error)
+    generate_lightweight_heatmap_base64 = None
+
 """
 flask_api_full.py  —  FYP: Accelerated Medical Imaging using ML Architectures
 Ahmed Rasheed (M3) — FULL Production API (Days 5–20 integrated)
@@ -435,7 +459,7 @@ def _stub_inference(modality: str) -> dict:
         "features_shape":           "1,1280,7,7",
         "num_mc_passes":            20,
         "llm_report":               llm_report,
-        "gradcam_base64":           None,
+        "gradcam_base64":           generated_gradcam_base64,
         "ood_flag":                 False,
         "ood_reconstruction_error": None,
     }
@@ -530,6 +554,28 @@ def analyze():
         file_path = f"/tmp/{study_uid}.jpg"
         file.save(file_path)
 
+        generated_gradcam_base64 = None
+
+        # Real Grad-CAM first: PyTorch gradient-based heatmap from trained EfficientNet.
+        try:
+            if generate_real_gradcam_base64 is not None:
+                generated_gradcam_base64 = generate_real_gradcam_base64(
+                    file_path,
+                    modality=modality,
+                    target_class=None,
+                    device="cpu"
+                )
+        except Exception as e:
+            print("[REAL GRADCAM WARNING]", e)
+            generated_gradcam_base64 = None
+
+        # Fallback only if real Grad-CAM fails.
+        try:
+            if not generated_gradcam_base64 and generate_lightweight_heatmap_base64 is not None:
+                generated_gradcam_base64 = generate_lightweight_heatmap_base64(file_path)
+        except Exception as e:
+            print("[LIGHTWEIGHT EXPLAINER WARNING]", e)
+
         # 2. Load Hamid's Phase 5 Pipeline (Cached to protect memory)
 # 2. Load Hamid's Phase 5 Pipeline (Cached to protect memory)
         if "real_pipeline" not in app.config:
@@ -586,7 +632,7 @@ def analyze():
                 "ood_flag":                1 if ood_flag else 0,
                 "ood_reconstruction_error": inf.get("ood_reconstruction_error"),
                 "llm_report":              inf.get("llm_report", ""),
-                "gradcam_base64":          inf.get("gradcam_base64"),
+                "gradcam_base64":          inf.get("gradcam_base64") or generated_gradcam_base64,
                 "gpio_triggered":          gpio_triggered,
                 "gpio_alert_type":         gpio_alert,
                 "pipeline_ms":             int((time.time() - t_start) * 1000),
@@ -617,7 +663,7 @@ def analyze():
         "gpio_alert_type": gpio_alert,
         "gpio_triggered":  gpio_triggered,
         "llm_report":      inf.get("llm_report", ""),
-        "gradcam_base64":  inf.get("gradcam_base64"),
+        "gradcam_base64":  inf.get("gradcam_base64") or generated_gradcam_base64,
         "mc_mean_probs":   inf.get("mc_mean_probs", []),
         "mc_std_probs":    inf.get("mc_std_probs", []),
         "record_id":       record_id,
