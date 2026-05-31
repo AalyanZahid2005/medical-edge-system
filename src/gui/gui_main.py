@@ -432,7 +432,7 @@ class CameraOverlayLabel(QLabel):
             painter.fillRect(cx - rw//2, cy - rh//2 - 25, 120, 25, QColor(C_WARNING))
             painter.setPen(QColor("#000"))
             painter.setFont(QFont("Segoe UI", 10, QFont.Bold))
-            painter.drawText(cx - rw//2 + 5, cy - rh//2 - 7, "Lesion: 88%")
+            painter.drawText(cx - rw//2 + 5, cy - rh//2 - 7, "CAMERA OFFLINE")
 
 class RiskTrafficLight(QWidget):
     def __init__(self, parent=None):
@@ -784,70 +784,98 @@ class MedicalEdgeDashboard(QMainWindow):
     # --- TAB 10: ANALYTICS DASHBOARD ---
     def build_tab10_analytics(self):
         lay = QVBoxLayout()
-        lay.addWidget(self._simulation_banner())
-        lay.setContentsMargins(15, 15, 15, 15)
-        lay.setSpacing(15)
+        lay.setContentsMargins(14, 14, 14, 14)
+        lay.setSpacing(14)
 
-        # Top Summary Metrics
-        hc = QHBoxLayout(); hc.setSpacing(10)
-        hc.addWidget(self._create_card("Total Scans Today", "1,204", C_SUCCESS, 80))
-        hc.addWidget(self._create_card("Avg Inference Latency", "42 ms", C_ACCENT, 80))
-        hc.addWidget(self._create_card("Network Uptime", "99.99%", C_WARNING, 80))
-        lay.addLayout(hc)
+        stats = self._live_stats()
+        records = self._live_history(limit=20)
 
-        # Live Real-Time Chart
-        chart_box = QFrame()
-        chart_box.setProperty('class', 'Card')
-        chart_lay = QVBoxLayout(chart_box)
-        lbl_title = QLabel("<b>Live Edge Server Performance (Scans per Minute vs Latency)</b>")
-        lbl_title.setStyleSheet("font-size: 16px;")
-        chart_lay.addWidget(lbl_title)
+        total_records = stats.get("total_records", len(records))
+        total_patients = stats.get("total_patients", "-")
+        pending_queue = stats.get("pending_queue", 0)
+        tier_breakdown = stats.get("tier_breakdown", {}) or {}
 
-        self.plt_analytics = pg.PlotWidget()
-        self.plt_analytics.setMinimumHeight(300)
-        self.plt_analytics.setYRange(0, 100)
-        self.plt_analytics.showGrid(x=True, y=True, alpha=0.2)
-        
-        # Two data streams for the live chart
-        self.hist_latency = np.full(100, 42.0)
-        self.hist_throughput = np.full(100, 20.0)
-        
-        self.crv_latency = self.plt_analytics.plot(pen=pg.mkPen(color=C_CRITICAL, width=2), name="Latency (ms)")
-        self.crv_throughput = self.plt_analytics.plot(pen=pg.mkPen(color=C_ACCENT, width=2), name="Throughput (Scans/Min)")
-        
-        # Add legend
-        self.plt_analytics.addLegend()
-        
-        chart_lay.addWidget(self.plt_analytics)
-        lay.addWidget(chart_box)
+        latencies = []
+        for rec in records:
+            try:
+                ms = float(rec.get("pipeline_ms", 0) or 0)
+                if ms > 0:
+                    latencies.append(ms)
+            except Exception:
+                pass
 
-        # Modality Distribution (Mock Progress Bars)
-        dist_box = QGroupBox("Modality Workload Distribution (24h)")
-        dist_box.setStyleSheet(f"QGroupBox {{ color: {C_ACCENT}; font-weight: bold; border: 1px solid {C_BORDER}; margin-top: 10px; }}")
-        dist_lay = QVBoxLayout()
-        
-        for modality, percentage in [("Chest X-Ray", 45), ("Brain MRI", 25), ("Skin Lesion", 15), ("ECG", 10), ("Retinal", 5)]:
-            row_lay = QHBoxLayout()
-            row_lay.addWidget(QLabel(modality), stretch=1)
-            bar = QProgressBar()
-            bar.setValue(percentage)
-            bar.setFixedHeight(8)
-            bar.setTextVisible(False)
-            bar.setStyleSheet(f"QProgressBar {{ background: {C_BG_PRIMARY}; border: none; }} QProgressBar::chunk {{ background: {C_SUCCESS}; border-radius: 4px; }}")
-            row_lay.addWidget(bar, stretch=4)
-            row_lay.addWidget(QLabel(f"{percentage}%"), stretch=1)
-            dist_lay.addLayout(row_lay)
-            
-        dist_box.setLayout(dist_lay)
-        lay.addWidget(dist_box)
+        avg_latency = sum(latencies) / len(latencies) if latencies else 0.0
+
+        grid = QGridLayout()
+        grid.setSpacing(12)
+
+        cards = [
+            ("Live DB Records", str(total_records), C_SUCCESS),
+            ("Live Patients", str(total_patients), C_ACCENT),
+            ("Pending Queue", str(pending_queue), C_WARNING),
+            ("Tier 1 Auto-SR", str(tier_breakdown.get("1", 0)), C_SUCCESS),
+            ("Tier 2 Doctor Review", str(tier_breakdown.get("2", 0)), C_WARNING),
+            ("Tier 3 Manual Review", str(tier_breakdown.get("3", 0)), C_CRITICAL),
+            ("Average Pipeline Latency", "{:.0f} ms".format(avg_latency), C_PURPLE),
+        ]
+
+        for i, (title, value, color) in enumerate(cards):
+            grid.addWidget(self._create_card(title, value, color, 105), i // 3, i % 3)
+
+        lay.addLayout(grid)
+
+        title = QLabel("Live Jetson Inference History")
+        title.setStyleSheet("font-size: 16px; font-weight: bold; color: #E8F4FD; margin-top: 6px;")
+        lay.addWidget(title)
+
+        tbl = QTableWidget(0, 8)
+        tbl.setHorizontalHeaderLabels([
+            "Record", "Patient", "Time", "Modality", "Prediction",
+            "Confidence", "Tier", "Latency"
+        ])
+        tbl.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        tbl.verticalHeader().setVisible(False)
+        tbl.verticalHeader().setDefaultSectionSize(30)
+        tbl.setAlternatingRowColors(True)
+        tbl.setWordWrap(False)
+        tbl.setMinimumHeight(420)
+        tbl.setStyleSheet("QTableWidget { font-size: 9pt; } QHeaderView::section { font-size: 9pt; font-weight: bold; }")
+
+        tbl.setRowCount(len(records))
+
+        for r, rec in enumerate(records):
+            row = [
+                str(rec.get("record_id", "")),
+                str(rec.get("patient_id", "")),
+                str(rec.get("inferred_at", "")),
+                str(rec.get("modality", "")),
+                self._pred_class(rec),
+                "{:.1f}%".format(self._pred_conf(rec)),
+                str(rec.get("routing_tier", "")),
+                "{} ms".format(rec.get("pipeline_ms", ""))
+            ]
+            for c, val in enumerate(row):
+                item = QTableWidgetItem(val)
+                item.setTextAlignment(Qt.AlignCenter)
+                if c == 6:
+                    tier = str(rec.get("routing_tier", ""))
+                    if tier == "3":
+                        item.setForeground(QBrush(QColor(C_CRITICAL)))
+                    elif tier == "2":
+                        item.setForeground(QBrush(QColor(C_WARNING)))
+                    else:
+                        item.setForeground(QBrush(QColor(C_SUCCESS)))
+                tbl.setItem(r, c, item)
+
+        lay.addWidget(tbl)
+
+        note = QLabel("All metrics on this tab are loaded from Jetson /stats and /history.")
+        note.setWordWrap(True)
+        note.setStyleSheet("color: {}; font-weight: bold;".format(C_SUCCESS))
+        lay.addWidget(note)
 
         lay.setAlignment(Qt.AlignTop)
         self.tabs.addTab(self._wrap_scroll(lay), "Analytics")
-
-        # Timer to update the live analytics chart
-        self.analytics_timer = QTimer()
-        self.analytics_timer.timeout.connect(self.update_analytics_chart)
-        self.analytics_timer.start(1000) # Update every 1 second
 
     def update_analytics_chart(self):
         # Shift data arrays to the left
@@ -878,7 +906,7 @@ class MedicalEdgeDashboard(QMainWindow):
         "display": "Glioma"
         }]
     },
-    "subject": { "reference": "Patient/PAT-001" },
+    "subject": { "reference": "Patient/{patient_id}" },
     "effectiveDateTime": "%s",
     "conclusion": "High-grade Glioma detected. Bayesian uncertainty ±1.2%%.",
     "presentedForm": [{
@@ -1129,18 +1157,74 @@ class MedicalEdgeDashboard(QMainWindow):
         scroll.setWidget(inner)
         return scroll
 
-    def _create_card(self, title, val, c_color=None, min_h=60):
-        f = QFrame(); f.setProperty('class', 'Card')
-        f.setMinimumHeight(min_h)
-        if c_color: f.setStyleSheet(f"QFrame {{ border-left: 3px solid {c_color}; }}")
-        l = QHBoxLayout(f); l.setContentsMargins(12,8,12,8)
-        lbl_t = QLabel(title); lbl_t.setFont(QFont("Segoe UI", 9)); lbl_t.setStyleSheet(f"color: {C_TEXT_SEC};")
-        lbl_v = QLabel(val); lbl_v.setFont(QFont("Segoe UI", 14, QFont.Bold)); lbl_v.setAlignment(Qt.AlignRight)
-        if c_color: lbl_v.setStyleSheet(f"color: {c_color};")
-        l.addWidget(lbl_t); l.addWidget(lbl_v)
-        return f
+    def _create_card(self, title, value, color=C_ACCENT, height=96, min_h=None, max_h=None, **kwargs):
+        """
+        Professional metric/result card.
+        IMPORTANT:
+        layout().itemAt(1).widget() must remain the value QLabel because
+        Scan-tab result update code depends on it.
+        """
+        card = QFrame()
+        card.setProperty("class", "MetricCard")
 
-    # --- TAB 1: SCAN ANALYSIS ---
+        try:
+            final_h = int(min_h if min_h is not None else height)
+        except Exception:
+            final_h = 96
+
+        card.setMinimumHeight(max(70, final_h))
+
+        if max_h is not None:
+            try:
+                card.setMaximumHeight(int(max_h))
+            except Exception:
+                pass
+
+        card.setStyleSheet("""
+            QFrame {
+                background: #111A26;
+                border: 1px solid #223449;
+                border-left: 4px solid %s;
+                border-radius: 8px;
+            }
+        """ % color)
+
+        lay = QVBoxLayout(card)
+        lay.setContentsMargins(14, 8, 14, 8)
+        lay.setSpacing(4)
+
+        title_lbl = QLabel(str(title))
+        title_lbl.setWordWrap(True)
+        title_lbl.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+        title_lbl.setStyleSheet(
+            "border: none; color: #7FA6C9; font-size: 9pt; font-weight: 700;"
+        )
+
+        value_text = str(value)
+        value_lbl = QLabel(value_text)
+        value_lbl.setWordWrap(True)
+        value_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        # Smaller font for long/multi-line clinical status text.
+        if "\n" in value_text or len(value_text) > 28:
+            font_size = 11
+        else:
+            font_size = 16
+
+        value_lbl.setStyleSheet(
+            "border: none; color: %s; font-size: %dpt; font-weight: 900;"
+            % (color, font_size)
+        )
+
+        # Keep this order:
+        # itemAt(0) = title label
+        # itemAt(1) = value label
+        lay.addWidget(title_lbl)
+        lay.addWidget(value_lbl, 1)
+
+        return card
+
+
     def build_tab1_scan(self):
             lay = QHBoxLayout()
             lay.setContentsMargins(15, 15, 15, 15)
@@ -1153,7 +1237,18 @@ class MedicalEdgeDashboard(QMainWindow):
             self.img_view.setMinimumSize(380, 380)
             self.img_view.setStyleSheet(f"background: #000; border: 1px solid {C_BORDER}; border-radius: 12px; color: {C_TEXT_SEC};")
             
-            btn_grp = PillButtonGroup(["Original", "GradCAM", "SHAP"])
+            btn_grp = QHBoxLayout()
+            self.btn_view_original = QPushButton("Original")
+            self.btn_view_gradcam = QPushButton("Grad-CAM")
+            self.btn_view_shap = QPushButton("SHAP")
+            self.btn_view_original.clicked.connect(self.show_original_image)
+            self.btn_view_gradcam.clicked.connect(self.show_gradcam_image)
+            self.btn_view_shap.clicked.connect(self.show_shap_image)
+            for _b in [self.btn_view_original, self.btn_view_gradcam, self.btn_view_shap]:
+                _b.setCursor(Qt.PointingHandCursor)
+                _b.setMinimumHeight(32)
+                _b.setStyleSheet("background: #0f172a; color: #00d9ff; border: 1px solid #00d9ff; border-radius: 6px; font-weight: bold;")
+                btn_grp.addWidget(_b)
             
             cl = QHBoxLayout()
             cl.addWidget(QLabel("Mean Confidence:"))
@@ -1165,7 +1260,7 @@ class MedicalEdgeDashboard(QMainWindow):
             cl.addWidget(self.conf_lbl)
             
             left.addWidget(self.img_view, stretch=1)
-            left.addWidget(btn_grp)
+            left.addLayout(btn_grp)
             left.addLayout(cl)
             
             right = QVBoxLayout()
@@ -1266,7 +1361,7 @@ class MedicalEdgeDashboard(QMainWindow):
             self.combo_modality.addItem("Bone X-Ray", "bone")
             self.combo_modality.addItem("ECG", "ecg")
             self.combo_modality.addItem("Retinal Fundus", "retinal")
-            self.combo_modality.addItem("Skin Lesion", "skin")
+            self.combo_modality.addItem("Skin Camera", "skin")
 
             right.addLayout(patient_row)
             right.addWidget(QLabel("Backend Modality:"))
@@ -1466,14 +1561,8 @@ class MedicalEdgeDashboard(QMainWindow):
                 raw = base64.b64decode(gradcam_b64)
                 pix = QPixmap()
                 if pix.loadFromData(raw):
-                    self.img_view.setPixmap(
-                        pix.scaled(
-                            self.img_view.width(),
-                            self.img_view.height(),
-                            Qt.KeepAspectRatio,
-                            Qt.SmoothTransformation
-                        )
-                    )
+                    self.current_gradcam_pixmap = pix
+                    self._show_pixmap_on_view(self.current_gradcam_pixmap, "Grad-CAM not available")
             except Exception as e:
                 print("GradCAM display error:", e)
 
@@ -1590,161 +1679,222 @@ class MedicalEdgeDashboard(QMainWindow):
         self.res_tier.setStyleSheet(f"QFrame {{ background: {bg}; border: 1px solid {C_CRITICAL}; border-left: 3px solid {C_CRITICAL}; }}")
         self.blink_count += 1
 
+
+    def _api_get_json(self, path, default=None, timeout=5):
+        try:
+            url = "http://10.42.0.51:5000" + path
+            r = requests.get(url, timeout=timeout)
+            if r.status_code == 200:
+                return r.json()
+        except Exception as e:
+            print("API GET failed:", path, e)
+        return default if default is not None else {}
+
+    def _live_stats(self):
+        data = self._api_get_json("/stats", {"status": "error", "stats": {}})
+        return data.get("stats", {}) if isinstance(data, dict) else {}
+
+    def _live_history(self, limit=10, patient_id=None):
+        path = "/history?limit={}".format(limit)
+        if patient_id:
+            path += "&patient_id={}".format(patient_id)
+        data = self._api_get_json(path, {"status": "error", "records": []})
+        if isinstance(data, dict):
+            return data.get("records", []) or []
+        return []
+
+    def _live_queue(self):
+        data = self._api_get_json("/queue", {"status": "error", "items": [], "count": 0})
+        return data if isinstance(data, dict) else {"items": [], "count": 0}
+
+    def _pred_class(self, rec):
+        pred = rec.get("prediction", {})
+        if isinstance(pred, dict):
+            return pred.get("class", "UNKNOWN")
+        return str(pred)
+
+    def _pred_conf(self, rec):
+        pred = rec.get("prediction", {})
+        if isinstance(pred, dict):
+            try:
+                return float(pred.get("mean_confidence", 0.0) or 0.0)
+            except Exception:
+                return 0.0
+        return 0.0
+
+    def _pred_unc(self, rec):
+        pred = rec.get("prediction", {})
+        if isinstance(pred, dict):
+            try:
+                return float(pred.get("uncertainty", 0.0) or 0.0)
+            except Exception:
+                return 0.0
+        return 0.0
+
+    def _icd10_code(self, modality, pred):
+        key = (modality or "").lower(), (pred or "").lower()
+        pred_l = key[1]
+
+        if "glioma" in pred_l:
+            return "C71.9"
+        if "meningioma" in pred_l:
+            return "D32.9"
+        if "pneumonia" in pred_l:
+            return "J18.9"
+        if "fracture" in pred_l:
+            return "S72.90XA"
+        if "mel" in pred_l or "melanoma" in pred_l:
+            return "C43.9"
+        if "normal" in pred_l:
+            return "Z03.89"
+        if "mismatch" in pred_l or "unknown" in pred_l or "rejected" in pred_l:
+            return "MANUAL_REVIEW"
+
+        return "REVIEW"
+
+    def _clear_table(self, table, rows):
+        table.setRowCount(rows)
+
+
     def trigger_analysis_mock(self):
-        self.conf_bar.set_value(98); self.conf_lbl.setText("98%")
+        QMessageBox.warning(
+            self,
+            "Mock Disabled",
+            "Mock analysis is disabled in the final build. Use Run Pipeline to call the live Jetson API."
+        )
 
-        self.res_class.layout().itemAt(1).widget().setText("Glioma (Malignant)\n[SNOMED: 126952004]") 
-        self.res_class.layout().itemAt(1).widget().setStyleSheet(f"color: {C_CRITICAL}; font-size: 13pt; font-weight: bold;")
-        self.res_class.setStyleSheet(f"QFrame {{ border-left: 3px solid {C_CRITICAL}; }}")
-        
-        self.res_unc.layout().itemAt(1).widget().setText("± 1.2% (Low)")
-        self.res_unc.layout().itemAt(1).widget().setStyleSheet(f"color: {C_SUCCESS}; font-size: 14pt; font-weight: bold;")
-        self.res_unc.setStyleSheet(f"QFrame {{ border-left: 3px solid {C_SUCCESS}; }}")
-        
-        self.res_tier.layout().itemAt(1).widget().setText("TIER 1 (Urgent)")
-        self.res_tier.layout().itemAt(1).widget().setStyleSheet(f"color: {C_CRITICAL}; font-size: 14pt; font-weight: bold;")
-        
-        self.res_ood.layout().itemAt(1).widget().setText("CLEAR")
-        self.res_ood.layout().itemAt(1).widget().setStyleSheet(f"color: {C_SUCCESS}; font-size: 14pt; font-weight: bold;")
-        self.res_ood.setStyleSheet(f"QFrame {{ border-left: 3px solid {C_SUCCESS}; }}")
-        
-        self.blink_count = 0; self.blink_timer.start(800)
-        self.typewriter.start_typing("AI Analysis Report:\nThe scan reveals a hyperintense mass in the right temporal lobe, highly consistent with a high-grade Glioma. Bayesian uncertainty is exceptionally low (±1.2%), indicating high model confidence. No out-of-distribution artifacts detected. Immediate routing to oncology recommended.")
-
-    # --- TAB 2: FUSION ---
     def build_tab2_fusion(self):
         lay = QVBoxLayout()
-        lay.addWidget(self._simulation_banner())
-        lay.setContentsMargins(15,15,15,15)
+        lay.setContentsMargins(15, 15, 15, 15)
         lay.setSpacing(15)
-        
+
         sh = QHBoxLayout()
-        src = QLineEdit(); src.setPlaceholderText("Search Patient ID (e.g. PAT-9042)"); src.setMinimumHeight(40)
-        bs = QPushButton("Fetch"); bs.setProperty('class', 'Primary'); bs.setMinimumHeight(40)
-        sh.addWidget(src); sh.addWidget(bs)
+        self.fusion_patient_search = QLineEdit()
+        self.fusion_patient_search.setPlaceholderText("Search Patient ID, e.g. PT-GUI-001")
+        self.fusion_patient_search.setMinimumHeight(40)
+        bs = QPushButton("Fetch Live History")
+        bs.setProperty("class", "Primary")
+        bs.setMinimumHeight(40)
+        bs.clicked.connect(self.refresh_fusion_patient)
+        sh.addWidget(self.fusion_patient_search)
+        sh.addWidget(bs)
         lay.addLayout(sh)
-        
-        lay.addWidget(SemiCircularGauge(), alignment=Qt.AlignCenter)
-        
-        hc = QHBoxLayout(); hc.setSpacing(8)
-        for m, d, w, c in [("Brain MRI", "Glioma", "85", C_CRITICAL), ("Chest X-Ray", "Normal", "10", C_SUCCESS), ("ECG", "Arrhythmia", "5", C_WARNING)]:
-            f = QFrame(); f.setProperty('class', 'Card'); f.setMinimumHeight(100)
-            fl = QVBoxLayout(f)
-            fl.addWidget(QLabel(f"<b>{m}</b>"))
-            dl = QLabel(d); dl.setStyleSheet(f"color: {c}; font-size: 14pt; font-weight: bold;")
-            fl.addWidget(dl)
-            pb = QProgressBar(); pb.setFixedHeight(6); pb.setValue(int(w)); pb.setTextVisible(False)
-            pb.setStyleSheet(f"QProgressBar {{ background: {C_BG_PRIMARY}; border: none; }} QProgressBar::chunk {{ background: {C_ACCENT}; border-radius: 3px; }}")
-            al = QHBoxLayout(); al.addWidget(QLabel("Attention:")); al.addWidget(pb)
-            fl.addLayout(al)
-            hc.addWidget(f)
-        lay.addLayout(hc)
-        
-        lay.addWidget(TimelineWidget())
-        tb = QLabel("TREND: DISEASE PROGRESSION DETECTED")
-        tb.setFixedHeight(36)
-        tb.setStyleSheet(f"background: {C_CRITICAL}; color: white; border-radius: 18px; font-weight: bold;")
-        tb.setAlignment(Qt.AlignCenter)
-        lay.addWidget(tb)
-        
+
+        self.fusion_summary = QLabel("Enter a patient ID and fetch live Jetson history.")
+        self.fusion_summary.setWordWrap(True)
+        self.fusion_summary.setStyleSheet("font-size: 16px; color: {}; font-weight: bold;".format(C_TEXT_PRI))
+        lay.addWidget(self.fusion_summary)
+
+        self.fusion_table = QTableWidget(0, 7)
+        self.fusion_table.setHorizontalHeaderLabels([
+            "Record", "Time", "Modality", "Prediction", "Confidence", "Tier", "Latency"
+        ])
+        self.fusion_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.fusion_table.verticalHeader().setVisible(False)
+        self.fusion_table.setAlternatingRowColors(True)
+        lay.addWidget(self.fusion_table)
+
         risk_group = QGroupBox("Clinical Routing and Risk Assessment")
         risk_group.setStyleSheet("QGroupBox { color: #00E5FF; font-weight: bold; border: 1px solid #333; margin-top: 10px; }")
         risk_layout = QHBoxLayout()
-        
+
         self.traffic_light = RiskTrafficLight()
         risk_layout.addWidget(self.traffic_light, alignment=Qt.AlignCenter)
-        
+
         text_panel = QVBoxLayout()
-        self.lbl_risk_title = QLabel("Awaiting Scan...")
+        self.lbl_risk_title = QLabel("Awaiting Patient History...")
         self.lbl_risk_title.setStyleSheet("font-size: 24px; font-weight: bold; color: #FFF;")
-        
-        self.lbl_risk_desc = QLabel("Upload a multi-modal scan sequence to calculate Bayesian uncertainty and clinical routing tier.")
+        self.lbl_risk_desc = QLabel("Live patient history is fetched from Jetson /history.")
         self.lbl_risk_desc.setWordWrap(True)
         self.lbl_risk_desc.setStyleSheet("color: #AAA; font-size: 14px;")
-        
         text_panel.addWidget(self.lbl_risk_title)
         text_panel.addWidget(self.lbl_risk_desc)
         text_panel.addStretch()
-        
+
         risk_layout.addLayout(text_panel)
         risk_layout.setStretch(0, 1)
         risk_layout.setStretch(1, 3)
-        
         risk_group.setLayout(risk_layout)
         lay.addWidget(risk_group)
-        
+
         lay.setAlignment(Qt.AlignTop)
         self.tabs.addTab(self._wrap_scroll(lay), "Fusion")
 
-    # --- TAB 3: ALQ ---
     def build_tab3_alq(self):
-        top_lay = QVBoxLayout()
-        top_lay.setContentsMargins(15,15,15,15); top_lay.setSpacing(15)
-        
-        hs = QHBoxLayout(); hs.setSpacing(8)
-        hs.addWidget(self._create_card("Pending Review", "12", C_WARNING, 80))
-        hs.addWidget(self._create_card("Corrected Today", "3", C_SUCCESS, 80))
-        hs.addWidget(self._create_card("Model Updated", "2 hrs ago", C_PURPLE, 80))
-        top_lay.addLayout(hs)
-        
-        self.alq_table = QTableWidget(0, 6)
-        self.alq_table.setHorizontalHeaderLabels(["Patient ID", "Date", "Modality", "AI Prediction", "Uncertainty", "Action"])
+        lay = QVBoxLayout()
+        lay.setContentsMargins(15, 15, 15, 15)
+        lay.setSpacing(15)
+
+        stats = self._live_stats()
+        queue = self._live_queue()
+        records = self._live_history(limit=30)
+
+        tier3_records = [rec for rec in records if rec.get("routing_tier") == 3]
+        queue_count = queue.get("count", 0)
+
+        hs = QHBoxLayout()
+        hs.setSpacing(8)
+        hs.addWidget(self._create_card("Backend Queue", str(queue_count), C_WARNING, 80))
+        hs.addWidget(self._create_card("Tier 3 Review Cases", str(len(tier3_records)), C_CRITICAL, 80))
+        hs.addWidget(self._create_card("AL Auto", str(stats.get("al_stats", "OFF")), C_ACCENT, 80))
+        lay.addLayout(hs)
+
+        lbl = QLabel("<b>Live Review Queue / High-Risk Records</b>")
+        lbl.setStyleSheet("font-size: 16px;")
+        lay.addWidget(lbl)
+
+        self.alq_table = QTableWidget(0, 7)
+        self.alq_table.setHorizontalHeaderLabels([
+            "Record", "Patient ID", "Date", "Modality", "AI Prediction",
+            "Uncertainty", "Action"
+        ])
         self.alq_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.alq_table.verticalHeader().setVisible(False)
         self.alq_table.setAlternatingRowColors(True)
-        self.alq_table.setWordWrap(False)
-        top_lay.addWidget(self.alq_table)
-        
-        top_w = QWidget(); top_w.setLayout(top_lay)
-        
-        cp = QFrame(); cp.setProperty('class', 'Card'); cp.setMinimumHeight(120)
-        cpl = QVBoxLayout(cp); cpl.setContentsMargins(15,15,15,15)
-        self.lbl_correction_target = QLabel("<b>EWC Correction Panel (Select a Patient)</b>")
-        cpl.addWidget(self.lbl_correction_target)
-        
-        hcp = QHBoxLayout()
-        hcp.addWidget(QLabel("True Label:"))
-        self.correction_dropdown = QComboBox()
-        self.correction_dropdown.addItems(["Normal", "Pneumonia", "COVID-19", "Melanoma"])
-        hcp.addWidget(self.correction_dropdown)
-        hcp.addWidget(QLabel("EWC Lambda:"))
-        hcp.addWidget(QSlider(Qt.Horizontal))
-        self.btn_ewc = QPushButton("Submit Correction + Run EWC")
-        self.btn_ewc.setProperty('class', 'Warning')
-        self.btn_ewc.setMinimumHeight(36)
-        self.btn_ewc.clicked.connect(self.mock_ewc)
-        hcp.addWidget(self.btn_ewc)
-        cpl.addLayout(hcp)
-        
-        self.prog_ewc = QProgressBar()
-        self.prog_ewc.setValue(0); self.prog_ewc.setFixedHeight(6)
-        cpl.addWidget(self.prog_ewc)
-        
-        splitter = QSplitter(Qt.Vertical)
-        splitter.addWidget(top_w)
-        splitter.addWidget(cp)
-        splitter.setStretchFactor(0, 1)
-        splitter.setStretchFactor(1, 0)
-        
-        ml = QVBoxLayout(); ml.setContentsMargins(0,0,0,0)
-        ml.addWidget(splitter)
-        self.tabs.addTab(self._wrap_scroll(ml), "Learning")
-        
-        QTimer.singleShot(100, self.refresh_alq_table)
+        self.alq_table.setRowCount(len(tier3_records))
+
+        for r, rec in enumerate(tier3_records):
+            row = [
+                str(rec.get("record_id", "")),
+                str(rec.get("patient_id", "")),
+                str(rec.get("inferred_at", "")),
+                str(rec.get("modality", "")),
+                self._pred_class(rec),
+                "± {:.2f}%".format(self._pred_unc(rec)),
+                "Doctor Review"
+            ]
+            for c, val in enumerate(row):
+                item = QTableWidgetItem(val)
+                item.setTextAlignment(Qt.AlignCenter)
+                if c == 6:
+                    item.setForeground(QBrush(QColor(C_CRITICAL)))
+                self.alq_table.setItem(r, c, item)
+
+        lay.addWidget(self.alq_table)
+
+        panel = QFrame()
+        panel.setProperty("class", "Card")
+        panel_lay = QVBoxLayout(panel)
+        panel_lay.addWidget(QLabel("<b>EWC / Correction Module</b>"))
+        msg = QLabel(
+            "Correction training is not auto-triggered from this GUI in the final safe build. "
+            "Use backend /correct only after a doctor verifies the true label."
+        )
+        msg.setWordWrap(True)
+        msg.setStyleSheet("color: {};".format(C_WARNING))
+        panel_lay.addWidget(msg)
+        lay.addWidget(panel)
+
+        lay.setAlignment(Qt.AlignTop)
+        self.tabs.addTab(self._wrap_scroll(lay), "Learning")
 
     def mock_ewc(self):
-        patient_id = "PAT-001"                     
-        old_pred = "AI Prediction"            
-        new_label = self.correction_dropdown.currentText()
-        
-        self.btn_ewc.setEnabled(False)
-        self.btn_ewc.setText("Recompiling TRT Engine...")
-        self.prog_ewc.setValue(0)
-        
-        self.ewc_thread = EWCWorkerThread(patient_id, old_pred, new_label)
-        self.ewc_thread.progress.connect(self.prog_ewc.setValue)
-        self.ewc_thread.finished.connect(self.on_ewc_finished)
-        self.ewc_thread.start()
+        QMessageBox.warning(
+            self,
+            "Correction Disabled",
+            "EWC correction is disabled from the GUI final build. "
+            "Use the backend /correct endpoint only after doctor-verified labels."
+        )
 
     def on_ewc_finished(self, success, message):
         self.btn_ewc.setEnabled(True)
@@ -1761,39 +1911,90 @@ class MedicalEdgeDashboard(QMainWindow):
 
 # --- TAB 4: CAMERA ---
     def build_tab4_camera(self):
-        tab = QWidget()                       
-        lay = QHBoxLayout(tab)                
-        lay.setContentsMargins(15,15,15,15); lay.setSpacing(15)
-        
-        self.cam_lbl = CameraOverlayLabel("[ USB/CSI OFFLINE ]")
+        tab = QWidget()
+        lay = QHBoxLayout(tab)
+        lay.setContentsMargins(15, 15, 15, 15)
+        lay.setSpacing(15)
+
+        self.cam_lbl = CameraOverlayLabel("[ CAMERA MODULE OFFLINE ]")
         self.cam_lbl.setMinimumSize(400, 350)
         lay.addWidget(self.cam_lbl, stretch=3)
-        
-        r = QVBoxLayout(); r.setSpacing(10)
-        rw = QWidget(); rw.setMinimumWidth(220); rw.setMaximumWidth(280); rw.setLayout(r)
-        
-        r.addWidget(QLabel("<b>Camera Target:</b>"))
-        cb = QComboBox(); cb.addItems(["Skin Lesion (HAM10000)", "Retinal Fundus"])
-        r.addWidget(cb)
-        
-        r.addWidget(self._create_card("Live Inference", "MELANOMA\n88% | 14fps", C_CRITICAL, 80))
-        
-        # --- NEW WIRED CAMERA BUTTON ---
-        self.btn_start_stream = QPushButton("Start Live Stream")
-        self.btn_start_stream.setProperty('class', 'Success')
-        self.btn_start_stream.setMinimumHeight(48)
-        self.btn_start_stream.clicked.connect(self.start_camera_stream)
-        
-        bc = QPushButton("📸 Capture Frame"); bc.setMinimumHeight(44)
-        r.addWidget(self.btn_start_stream); r.addWidget(bc)
-        # -------------------------------
-        
-        r.addStretch()
-        
-        lay.addWidget(rw, stretch=1)
-        self.tabs.addTab(tab, "Camera")     
 
-    # --- TAB 5: HARDWARE ---
+        r = QVBoxLayout()
+        r.setSpacing(10)
+        rw = QWidget()
+        rw.setMinimumWidth(260)
+        rw.setMaximumWidth(340)
+        rw.setLayout(r)
+
+        r.addWidget(QLabel("<b>Camera / Stream Status</b>"))
+        r.addWidget(self._create_card("Live Camera", "OFFLINE", C_WARNING, 80))
+        r.addWidget(self._create_card("Live Inference", "DISABLED", C_WARNING, 80))
+
+        note = QLabel(
+            "No real USB/CSI camera stream is connected to this GUI build. "
+            "Use the Scan tab for real Jetson inference from uploaded medical images."
+        )
+        note.setWordWrap(True)
+        note.setStyleSheet("color: {}; font-weight: bold;".format(C_WARNING))
+        r.addWidget(note)
+
+        self.btn_start_stream = QPushButton("Camera Stream Not Available")
+        self.btn_start_stream.setEnabled(False)
+        self.btn_start_stream.setMinimumHeight(48)
+        r.addWidget(self.btn_start_stream)
+
+        r.addStretch()
+        lay.addWidget(rw, stretch=1)
+        self.tabs.addTab(tab, "Camera")
+
+
+    def refresh_fusion_patient(self):
+        try:
+            pid = self.fusion_patient_search.text().strip()
+            records = self._live_history(limit=20, patient_id=pid if pid else None)
+
+            self.fusion_table.setRowCount(len(records))
+            highest_tier = 1
+
+            for r, rec in enumerate(records):
+                highest_tier = max(highest_tier, int(rec.get("routing_tier", 1) or 1))
+                row = [
+                    str(rec.get("record_id", "")),
+                    str(rec.get("inferred_at", "")),
+                    str(rec.get("modality", "")),
+                    self._pred_class(rec),
+                    "{:.1f}%".format(self._pred_conf(rec)),
+                    str(rec.get("routing_tier", "")),
+                    "{} ms".format(rec.get("pipeline_ms", ""))
+                ]
+                for c, val in enumerate(row):
+                    item = QTableWidgetItem(val)
+                    item.setTextAlignment(Qt.AlignCenter)
+                    self.fusion_table.setItem(r, c, item)
+
+            self.fusion_summary.setText("Live records found: {}".format(len(records)))
+
+            if highest_tier >= 3:
+                self.traffic_light.set_risk_level(3)
+                self.lbl_risk_title.setText("Tier 3 Risk Present")
+                self.lbl_risk_title.setStyleSheet("font-size: 24px; font-weight: bold; color: {};".format(C_CRITICAL))
+                self.lbl_risk_desc.setText("At least one live Jetson record requires urgent manual review.")
+            elif highest_tier == 2:
+                self.traffic_light.set_risk_level(2)
+                self.lbl_risk_title.setText("Tier 2 Review Present")
+                self.lbl_risk_title.setStyleSheet("font-size: 24px; font-weight: bold; color: {};".format(C_WARNING))
+                self.lbl_risk_desc.setText("At least one live Jetson record requires AI-assisted doctor review.")
+            else:
+                self.traffic_light.set_risk_level(1)
+                self.lbl_risk_title.setText("Tier 1 / Auto-SR")
+                self.lbl_risk_title.setStyleSheet("font-size: 24px; font-weight: bold; color: {};".format(C_SUCCESS))
+                self.lbl_risk_desc.setText("Latest live records are in auto-summary range.")
+
+        except Exception as e:
+            QMessageBox.critical(self, "Fusion Fetch Error", str(e))
+
+
     def build_tab5_hw(self):
         lay = QVBoxLayout()
         lay.setContentsMargins(15,15,15,15); lay.setSpacing(15)
@@ -1838,69 +2039,82 @@ class MedicalEdgeDashboard(QMainWindow):
     # --- TAB 6: FEDERATED ---
     def build_tab6_federated(self):
         lay = QVBoxLayout()
-        lay.addWidget(self._simulation_banner())
-        lay.setContentsMargins(15,15,15,15); lay.setSpacing(15)
-        
-        hh = QHBoxLayout(); hh.setSpacing(10)
-        for h, a in [("Hospital A", "92.4%"), ("Hospital B", "89.1%"), ("Hospital C", "94.0%")]:
-            f = QFrame(); f.setProperty('class', 'Card'); f.setMinimumHeight(110)
-            fl = QVBoxLayout(f)
-            fl.addWidget(QLabel(f"<b>{h}</b>"))
-            fl.addWidget(QLabel("🟢 Online"))
-            fl.addWidget(QLabel(f"Acc: <span style='color:{C_SUCCESS}'><b>{a}</b></span>"))
-            fl.addWidget(QLabel("Samples: 1,204"))
-            hh.addWidget(f)
-        lay.addLayout(hh)
-        
-        bs = QPushButton("Synchronize Global Network (FedAvg)")
-        bs.setMinimumHeight(50)
-        bs.setStyleSheet(f"background: {C_WARNING}; color: black; font-size: 11pt; font-weight: bold;")
-        lay.addWidget(bs)
-        
-        tbl = QTableWidget(3, 5)
-        tbl.setHorizontalHeaderLabels(["Round", "Hosp A", "Hosp B", "Hosp C", "Global"])
-        tbl.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        tbl.verticalHeader().setVisible(False)
-        tbl.setMinimumHeight(180)
-        for r, row in enumerate([("3","92.4%","89.1%","94.0%","93.8%"), ("2","91.0%","88.5%","92.1%","91.5%"), ("1","88.2%","85.0%","89.0%","88.0%")]):
-            for c, val in enumerate(row): tbl.setItem(r, c, QTableWidgetItem(val))
-        lay.addWidget(tbl)
-        
-        t = QTextEdit()
-        t.setReadOnly(True)
-        t.setMinimumHeight(120); t.setMaximumHeight(180)
-        t.setStyleSheet(f"background: #000; color: {C_SUCCESS}; font-family: monospace; border: 1px solid {C_BORDER};")
-        t.setText("> Initializing Federated Server...\n> 3 nodes connected.\n> Awaiting Round 4 aggregation...")
-        lay.addWidget(t)
-        
+        lay.setContentsMargins(15, 15, 15, 15)
+        lay.setSpacing(15)
+
+        lay.addWidget(self._simulation_banner("Federated learning is research/simulation evidence, not live hospital network data."))
+
+        info = QTextEdit()
+        info.setReadOnly(True)
+        info.setLineWrapMode(QTextEdit.WidgetWidth)
+        info.setMinimumHeight(260)
+        info.setStyleSheet("background: #000; color: {}; font-family: monospace; border: 1px solid {};".format(C_SUCCESS, C_BORDER))
+        info.setText(
+            "FEDERATED MODULE STATUS\n\n"
+            "No live multi-hospital federation is connected in this GUI session.\n"
+            "This tab is kept as research evidence for FedAvg / privacy-preserving learning.\n"
+            "For final defense, do not present these values as live hospital statistics."
+        )
+        lay.addWidget(info)
+
         lay.setAlignment(Qt.AlignTop)
         self.tabs.addTab(self._wrap_scroll(lay), "Federated")
 
-    # --- TAB 7: SECURITY ---
     def build_tab7_security(self):
         lay = QVBoxLayout()
-        lay.addWidget(self._simulation_banner())
-        lay.setContentsMargins(15,15,15,15); lay.setSpacing(15)
-        
-        grid = QGridLayout(); grid.setSpacing(10)
-        for i, (t, d, c) in enumerate([("AES-256 RAM Encrypt", "Key: Jetson Serial", C_SUCCESS), ("JWT Auth", "Token valid", C_SUCCESS), 
-                                       ("TLS / HTTPS", "Cert Valid", C_SUCCESS), ("DICOM C-FIND", "Queue: 4", C_ACCENT)]):
-            f = self._create_card(t, "ACTIVE", c, 100)
-            f.layout().addWidget(QLabel(d))
-            grid.addWidget(f, i//2, i%2)
+        lay.setContentsMargins(15, 15, 15, 15)
+        lay.setSpacing(15)
+
+        health = self._api_get_json("/health", {})
+        stats = self._live_stats()
+        queue = self._live_queue()
+
+        grid = QGridLayout()
+        grid.setSpacing(10)
+
+        cards = [
+            ("Jetson API", health.get("status", "unknown").upper(), C_SUCCESS if health.get("status") == "ok" else C_CRITICAL),
+            ("Database", health.get("db", "unknown").upper(), C_SUCCESS if health.get("db") == "connected" else C_CRITICAL),
+            ("Precision", health.get("precision", "unknown"), C_ACCENT),
+            ("Stub Mode", str(health.get("stub_mode", "unknown")), C_SUCCESS if not health.get("stub_mode", True) else C_CRITICAL),
+            ("Pending Queue", str(queue.get("count", stats.get("pending_queue", 0))), C_WARNING),
+            ("C-FIND", "ON" if health.get("cfind_running") else "OFF", C_WARNING),
+        ]
+
+        for i, (title, value, color) in enumerate(cards):
+            grid.addWidget(self._create_card(title, value, color, 100), i // 2, i % 2)
+
         lay.addLayout(grid)
-        
+
         t = QTextEdit()
         t.setReadOnly(True)
-        t.setMinimumHeight(200)
+        t.setLineWrapMode(QTextEdit.WidgetWidth)
+        t.setMinimumHeight(220)
         t.setStyleSheet("background: #000; color: #E8F4FD; font-family: monospace; border: 1px solid #1E2D40;")
-        t.setText("[INFO] TLS Handshake OK\n[WARN] GPU Temp rising\n[CRITICAL] TIER 3 Route triggered.")
+        t.setText(
+            "[LIVE HEALTH]\n"
+            "API status: {}\n"
+            "DB: {}\n"
+            "Precision: {}\n"
+            "Stub mode: {}\n"
+            "Pending queue: {}\n"
+            "WebSocket: {}\n"
+            "Timestamp: {}"
+            .format(
+                health.get("status"),
+                health.get("db"),
+                health.get("precision"),
+                health.get("stub_mode"),
+                queue.get("count", stats.get("pending_queue", 0)),
+                health.get("websocket"),
+                health.get("timestamp")
+            )
+        )
         lay.addWidget(t)
-        
+
         lay.setAlignment(Qt.AlignTop)
         self.tabs.addTab(self._wrap_scroll(lay), "Security")
 
-    # --- TAB 8: CLINICAL VALIDATION ---
     def build_tab8_validation(self):
         lay = QVBoxLayout()
         lay.setContentsMargins(15, 15, 15, 15)
@@ -1931,7 +2145,7 @@ class MedicalEdgeDashboard(QMainWindow):
             ("Chest X-Ray", 0.92, C_SUCCESS),
             ("Retinal Fundus", 0.95, C_WARNING),
             ("ECG Signal", 0.96, C_ACCENT),
-            ("Skin Lesion", 0.91, C_PURPLE),
+            ("Skin Camera", 0.91, C_PURPLE),
             ("Bone Fracture", 0.94, "#FF9100") 
         ]
 
@@ -1965,7 +2179,7 @@ class MedicalEdgeDashboard(QMainWindow):
             ("Chest X-Ray", "91.2%", "93.0%", "89.5%", "94.2%"),
             ("Retinal Fundus", "94.0%", "96.5%", "93.1%", "97.0%"),
             ("ECG Signal", "95.8%", "97.0%", "94.5%", "97.8%"),
-            ("Skin Lesion", "90.5%", "92.4%", "88.0%", "93.5%"),
+            ("Skin Camera", "90.5%", "92.4%", "88.0%", "93.5%"),
             ("Bone Fracture", "93.2%", "95.1%", "91.8%", "96.0%")
         ]
 
@@ -2081,66 +2295,78 @@ class MedicalEdgeDashboard(QMainWindow):
 # --- TAB 9: ICD-10 BILLING & ANALYTICS ---
     def build_tab9_billing(self):
         lay = QVBoxLayout()
-        lay.addWidget(self._simulation_banner())
         lay.setContentsMargins(15, 15, 15, 15)
         lay.setSpacing(15)
 
-        # 1. Top Financial Summary Cards
-        hc = QHBoxLayout(); hc.setSpacing(10)
-        hc.addWidget(self._create_card("Scans Processed (24h)", "142", C_ACCENT, 80))
-        hc.addWidget(self._create_card("Auto-Coded (ICD-10)", "138", C_SUCCESS, 80))
-        hc.addWidget(self._create_card("Admin Hours Saved", "11.5 hrs", C_WARNING, 80))
+        stats = self._live_stats()
+        records = self._live_history(limit=20)
+
+        manual_count = 0
+        coded_count = 0
+        for rec in records:
+            pred = self._pred_class(rec)
+            code = self._icd10_code(rec.get("modality", ""), pred)
+            if code == "MANUAL_REVIEW" or rec.get("routing_tier") == 3:
+                manual_count += 1
+            else:
+                coded_count += 1
+
+        hc = QHBoxLayout()
+        hc.setSpacing(10)
+        hc.addWidget(self._create_card("Live DB Records", str(stats.get("total_records", len(records))), C_ACCENT, 80))
+        hc.addWidget(self._create_card("Auto-Coded From History", str(coded_count), C_SUCCESS, 80))
+        hc.addWidget(self._create_card("Manual Review Required", str(manual_count), C_WARNING, 80))
         lay.addLayout(hc)
 
-        # 2. Daily Billing Ledger Table
-        lbl_title = QLabel("<b>Automated ICD-10-CM Daily Ledger</b>")
+        lbl_title = QLabel("<b>Live ICD-10-CM Ledger from Jetson History</b>")
         lbl_title.setStyleSheet("font-size: 16px; margin-top: 10px;")
         lay.addWidget(lbl_title)
 
-        tbl = QTableWidget(6, 6)
-        tbl.setHorizontalHeaderLabels(["Timestamp", "Patient ID", "Modality", "AI Diagnosis", "ICD-10 Code", "Status"])
+        tbl = QTableWidget(0, 7)
+        tbl.setHorizontalHeaderLabels([
+            "Record", "Timestamp", "Patient ID", "Modality",
+            "AI Diagnosis", "ICD-10 Code", "Status"
+        ])
         tbl.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         tbl.verticalHeader().setVisible(False)
         tbl.setAlternatingRowColors(True)
-        tbl.setMinimumHeight(250)
+        tbl.setMinimumHeight(300)
+        tbl.setRowCount(len(records))
 
-        # Mock billing data mapping AI outputs to CMS 2025 ICD-10 codes
-        billing_data = [
-            ("09:30 AM", "PAT-001", "Brain MRI", "Glioma", "C71.9", "Exported (FHIR)"),
-            ("09:15 AM", "PAT-084", "Chest X-Ray", "Pneumonia", "J18.9", "Exported (FHIR)"),
-            ("08:50 AM", "PAT-112", "Skin Lesion", "Melanoma", "C43.9", "Exported (FHIR)"),
-            ("08:22 AM", "PAT-045", "Retinal", "Diabetic Retinopathy", "E11.3592", "Exported (FHIR)"),
-            ("08:10 AM", "PAT-099", "ECG", "Arrhythmia", "I49.9", "Exported (FHIR)"),
-            ("07:55 AM", "PAT-201", "Bone X-Ray", "Fracture (Femur)", "S72.90XA", "Pending Review")
-        ]
+        for r, rec in enumerate(records):
+            pred = self._pred_class(rec)
+            code = self._icd10_code(rec.get("modality", ""), pred)
+            status = "Manual Review" if rec.get("routing_tier") == 3 or code == "MANUAL_REVIEW" else "Auto-Coded"
+            row = [
+                str(rec.get("record_id", "")),
+                str(rec.get("inferred_at", "")),
+                str(rec.get("patient_id", "")),
+                str(rec.get("modality", "")),
+                pred,
+                code,
+                status
+            ]
 
-        for r, row in enumerate(billing_data):
             for c, val in enumerate(row):
                 item = QTableWidgetItem(val)
                 item.setTextAlignment(Qt.AlignCenter)
-                # Highlight the ICD-10 code column
-                if c == 4:
+                if c == 5:
                     item.setForeground(QBrush(QColor(C_ACCENT)))
                     item.setFont(QFont("Segoe UI", 10, QFont.Bold))
-                # Highlight Status
-                if c == 5:
-                    color = C_SUCCESS if "Exported" in val else C_WARNING
-                    item.setForeground(QBrush(QColor(color)))
+                if c == 6:
+                    item.setForeground(QBrush(QColor(C_WARNING if "Manual" in val else C_SUCCESS)))
                 tbl.setItem(r, c, item)
 
         lay.addWidget(tbl)
 
-        # 3. Export to CSV Button
-        btn_csv = QPushButton("Download Daily Billing Report (CSV)")
-        btn_csv.setProperty('class', 'Primary')
-        btn_csv.setMinimumHeight(44)
-        btn_csv.clicked.connect(lambda: QMessageBox.information(self, "Export", "Billing ledger exported to /reports/billing_summary.csv"))
-        lay.addWidget(btn_csv, alignment=Qt.AlignRight)
+        note = QLabel("This ledger is generated from real Jetson /history records. It does not use hardcoded dummy patient rows.")
+        note.setWordWrap(True)
+        note.setStyleSheet("color: {}; font-weight: bold;".format(C_SUCCESS))
+        lay.addWidget(note)
 
         lay.setAlignment(Qt.AlignTop)
         self.tabs.addTab(self._wrap_scroll(lay), "Billing")
 
-    # --- FUNCTIONAL LOGIC ---
     def update_hw_ui(self, data):
         self.header.update_hw(data['gpu'], data['temp'], data['power'])
         self.g_gpu.set_value(data['gpu'])
@@ -2159,6 +2385,46 @@ class MedicalEdgeDashboard(QMainWindow):
                 self.lbl_warn.setStyleSheet(f"background: {C_CRITICAL}; color: white; font-weight: bold; border-radius: 4px;")
                 self.lbl_warn.setText("⚠ CRITICAL: Thermal Throttling Active (>70°C)")
         else: self.lbl_warn.hide()
+
+    def _show_pixmap_on_view(self, pix, fallback_text="No image available"):
+        try:
+            if pix is None or pix.isNull():
+                self.img_view.setText(fallback_text)
+                return False
+
+            self.img_view.setPixmap(
+                pix.scaled(
+                    self.img_view.width(),
+                    self.img_view.height(),
+                    Qt.KeepAspectRatio,
+                    Qt.SmoothTransformation
+                )
+            )
+            return True
+        except Exception as e:
+            print("Image display error:", e)
+            self.img_view.setText(fallback_text)
+            return False
+
+    def show_original_image(self):
+        if hasattr(self, "current_original_pixmap"):
+            self._show_pixmap_on_view(self.current_original_pixmap, "Original image not available")
+        else:
+            self.img_view.setText("Original image not loaded")
+
+    def show_gradcam_image(self):
+        if hasattr(self, "current_gradcam_pixmap"):
+            self._show_pixmap_on_view(self.current_gradcam_pixmap, "Grad-CAM not available")
+        else:
+            self.img_view.setText("Grad-CAM not generated yet")
+
+    def show_shap_image(self):
+        # SHAP is not generated by the live Jetson API yet.
+        # Keep this honest instead of showing fake Grad-CAM.
+        self.img_view.setText(
+            "SHAP explanation is not available in live Jetson API.\n"
+            "Use Grad-CAM for real explainability in this build."
+        )
 
     def select_image_file(self):
         """
@@ -2181,14 +2447,8 @@ class MedicalEdgeDashboard(QMainWindow):
 
             pix = QPixmap(file_path)
             if not pix.isNull():
-                self.img_view.setPixmap(
-                    pix.scaled(
-                        self.img_view.width(),
-                        self.img_view.height(),
-                        Qt.KeepAspectRatio,
-                        Qt.SmoothTransformation
-                    )
-                )
+                self.current_original_pixmap = pix
+                self._show_pixmap_on_view(self.current_original_pixmap, "Original image not available")
             else:
                 self.img_view.setText("Loaded:\n{}".format(filename))
 
@@ -2305,24 +2565,52 @@ class MedicalEdgeDashboard(QMainWindow):
 
 
     def refresh_alq_table(self):
-        self.alq_table.setRowCount(0)
-        data = [("PAT-001", "2026-05-05", "Chest X-Ray", "Pneumonia", 14.2), ("PAT-042", "2026-05-04", "Skin", "Melanoma", 8.1)]
-        for r, row in enumerate(data):
-            self.alq_table.insertRow(r)
-            for c, val in enumerate(row):
-                if c == 4:
-                    ub = QLabel(f"{val:.1f}%")
-                    col = C_CRITICAL if val > 10.0 else C_WARNING
-                    ub.setStyleSheet(f"background:{col}; color:black; border-radius:10px; padding:2px; font-weight:bold;")
-                    ub.setAlignment(Qt.AlignCenter)
-                    self.alq_table.setCellWidget(r, 4, ub)
+        """
+        Refresh learning/review table using real Jetson /history records.
+        No hardcoded dummy patient rows are used.
+        """
+        try:
+            if not hasattr(self, "alq_table"):
+                return
+
+            records = []
+            if hasattr(self, "_live_history"):
+                records = self._live_history(limit=30)
+            records = [rec for rec in records if rec.get("routing_tier") == 3]
+
+            self.alq_table.setRowCount(0)
+            self.alq_table.setRowCount(len(records))
+
+            for r, rec in enumerate(records):
+                pred = rec.get("prediction", {})
+                if isinstance(pred, dict):
+                    pred_class = pred.get("class", "UNKNOWN")
+                    uncertainty = float(pred.get("uncertainty", 0.0) or 0.0)
                 else:
-                    item = QTableWidgetItem(str(val))
+                    pred_class = str(pred)
+                    uncertainty = 0.0
+
+                row = [
+                    str(rec.get("record_id", "")),
+                    str(rec.get("patient_id", "")),
+                    str(rec.get("inferred_at", "")),
+                    str(rec.get("modality", "")),
+                    pred_class,
+                    "± {:.2f}%".format(uncertainty),
+                    "Doctor Review"
+                ]
+
+                max_cols = min(self.alq_table.columnCount(), len(row))
+                for c in range(max_cols):
+                    item = QTableWidgetItem(row[c])
                     item.setTextAlignment(Qt.AlignCenter)
+                    if c == max_cols - 1:
+                        item.setForeground(QBrush(QColor(C_CRITICAL)))
                     self.alq_table.setItem(r, c, item)
-            b = QPushButton("Review"); b.setProperty('class', 'Primary')
-            b.clicked.connect(lambda chk, pid=row[0]: self.load_correction_panel(pid))
-            self.alq_table.setCellWidget(r, 5, b)
+
+        except Exception as e:
+            print("refresh_alq_table live refresh failed:", e)
+
 
     def load_correction_panel(self, pid):
         self.lbl_correction_target.setText(f"<b>EWC Correction Panel (Selected: {pid})</b>")
