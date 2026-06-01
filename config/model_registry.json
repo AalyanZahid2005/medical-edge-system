@@ -1,0 +1,336 @@
+{
+  "schema_version": 1,
+  "created_at": "2026-06-01 20:00:07",
+  "updated_at": "2026-06-01 20:25:01",
+  "models": {
+    "brain_mri": {
+      "display_modality": "Brain MRI",
+      "active_version": "current_jetson_runtime_classifier",
+      "versions": {
+        "current_jetson_runtime_classifier": {
+          "modality": "brain_mri",
+          "display_modality": "Brain MRI",
+          "version": "current_jetson_runtime_classifier",
+          "display_version": "Current Jetson Runtime Classifier",
+          "task": "classification",
+          "model_path": "JETSON(fyp): jetson_deployment_package/mri_classifier_int8.engine",
+          "model_format": "engine",
+          "sha256": "12986d371ff695adef25d7bbde3fcead94573334f488c07da442dc197abddc74",
+          "labels_path": "config/model_slots/brain_mri_labels.json",
+          "preprocessing_path": "",
+          "metrics_path": "",
+          "status": "jetson_runtime_detected",
+          "notes": "Detected from connected Jetson runtime package.",
+          "imported_at": "2026-06-01 20:25:01",
+          "updated_at": "2026-06-01 20:25:01"
+        },
+        "jetson_tier_ood_guard": {
+          "modality": "brain_mri",
+          "display_modality": "Brain MRI",
+          "version": "jetson_tier_ood_guard",
+          "display_version": "Jetson Tier / OOD Guard",
+          "task": "ood_guard_and_routing",
+          "model_path": "JETSON(fyp): jetson_deployment_package/mri_ood_guard_int8.engine",
+          "model_format": "engine",
+          "sha256": "7bb41b826afe50d70d5782ca35f8b0a8818641e79ea9df2d5add9e25f9aabdef",
+          "labels_path": "",
+          "preprocessing_path": "",
+          "metrics_path": "",
+          "status": "jetson_runtime_detected_ood_guard",
+          "notes": "Detected OOD/Tier guard from connected Jetson runtime package.",
+          "imported_at": "2026-06-01 20:25:01",
+          "updated_at": "2026-06-01 20:25:01"
+        }
+      }
+    },
+    "chest_xray": {
+      "display_modality": "Chest X-Ray",
+      "active_version": "current_jetson_runtime_classifier",
+      "versions": {
+        "current_jetson_runtime_classifier": {
+          "modality": "chest_xray",
+          "display_modality": "Chest X-Ray",
+          "version": "current_jetson_runtime_classifier",
+          "display_version": "Current Jetson Runtime Classifier",
+          "task": "classification",
+          "model_path": "JETSON(fyp): jetson_deployment_package/pneumonia_classifier_int8.engine",
+          "model_format": "engine",
+          "sha256": "70ca1402decf90be209346cd480935353c84a72e9f9e7bf32099c47219edd735",
+          "labels_path": "config/model_slots/chest_xray_labels.json",
+          "preprocessing_path": "",
+          "metrics_path": "",
+          "status": "jetson_runtime_detected",
+          "notes": "Detected from connected Jetson runtime package.",
+          "imported_at": "2026-06-01 20:25:01",
+          "updated_at": "2026-06-01 20:25:01"
+        },
+        "jetson_tier_ood_guard": {
+          "modality": "chest_xray",
+          "display_modality": "Chest X-Ray",
+          "version": "jetson_tier_ood_guard",
+          "display_version": "Jetson Tier / OOD Guard",
+          "task": "ood_guard_and_routing",
+          "model_path": "JETSON(fyp): jetson_deployment_package/pneumonia_ood_guard_int8.engine",
+          "model_format": "engine",
+          "sha256": "64a42bdaf6d6c17d0cde0f759815295aee8b3a1f3166d4dc8ed69ad8032a3e2b",
+          "labels_path": "",
+          "preprocessing_path": "",
+          "metrics_path": "",
+          "status": "jetson_runtime_detected_ood_guard",
+          "notes": "Detected OOD/Tier guard from connected Jetson runtime package.",
+          "imported_at": "2026-06-01 20:25:01",
+          "updated_at": "2026-06-01 20:25:01"
+        }
+      }
+    },
+    "retinal": {
+      "display_modality": "Retinal",
+      "active_version": "current_jetson_runtime_classifier",
+      "versions": {
+        "current_jetson_runtime_classifier": {
+          "modality": "retinal",
+          "display_modality": "Retinal",
+          "version": "current_jetson_runtime_classifier",
+          "display_version": "Current Jetson Runtime Classifier",
+          "task": "classification",
+          "model_path": "JETSON(fyp): jetson_deployment_package/retina_classifier_int8.engine",
+          "model_format": "engine",
+          "sha256": "c93c3e2a8ff19fd2b9f6efd7d57734eddad744c58918250037d783f567935c0c",
+          "labels_path": "config/model_slots/retinal_labels.json",
+          "preprocessing_path": "",
+          "metrics_path": "",
+          "status": "jetson_runtime_detected",
+          "notes": "Detected from connected Jetson runtime package.",
+          "imported_at": "2026-06-01 20:25:01",
+          "updated_at": "2026-06-01 20:25:01"
+        },
+        "jetson_tier_ood_guard": {
+          "modality": "retinal",
+          "display_modality": "Retinal",
+          "version": "jetson_tier_ood_guard",
+          "display_version": "Jetson Tier / OOD Guard",
+          "task": "ood_guard_and_routing",
+          "model_path": "JETSON(fyp): jetson_deployment_package/eyes_ood_guard_int8.engine",
+          "model_format": "engine",
+          "sha256": "f1639eef19539d4a0e57fd97fde7a42efe0af16f19ab873b055a48d2ac980f29",
+          "labels_path": "",
+          "preprocessing_path": "",
+          "metrics_path": "",
+          "status": "jetson_runtime_detected_ood_guard",
+          "notes": "Detected OOD/Tier guard from connected Jetson runtime package.",
+          "imported_at": "2026-06-01 20:25:01",
+          "updated_at": "2026-06-01 20:25:01"
+        }
+      }
+    },
+    "ecg": {
+      "display_modality": "ECG",
+      "active_version": "current_jetson_runtime_classifier",
+      "versions": {
+        "current_jetson_runtime_classifier": {
+          "modality": "ecg",
+          "display_modality": "ECG",
+          "version": "current_jetson_runtime_classifier",
+          "display_version": "Current Jetson Runtime Classifier",
+          "task": "signal_classification",
+          "model_path": "JETSON(fyp): jetson_deployment_package/ecg_classifier_int8.engine",
+          "model_format": "engine",
+          "sha256": "4d4dd74eccf4027bcc59efb868a0ac820dcf94260fedb1c4fa1a5da5e69af68d",
+          "labels_path": "config/model_slots/ecg_labels.json",
+          "preprocessing_path": "",
+          "metrics_path": "",
+          "status": "jetson_runtime_detected",
+          "notes": "Detected from connected Jetson runtime package.",
+          "imported_at": "2026-06-01 20:25:01",
+          "updated_at": "2026-06-01 20:25:01"
+        },
+        "jetson_tier_ood_guard": {
+          "modality": "ecg",
+          "display_modality": "ECG",
+          "version": "jetson_tier_ood_guard",
+          "display_version": "Jetson Tier / OOD Guard",
+          "task": "ood_guard_and_routing",
+          "model_path": "JETSON(fyp): jetson_deployment_package/ecg_ood_guard_int8.engine",
+          "model_format": "engine",
+          "sha256": "e4e73f97b7d9722b8f201761be9bb3c022225f48513df54c93934008a351593c",
+          "labels_path": "",
+          "preprocessing_path": "",
+          "metrics_path": "",
+          "status": "jetson_runtime_detected_ood_guard",
+          "notes": "Detected OOD/Tier guard from connected Jetson runtime package.",
+          "imported_at": "2026-06-01 20:25:01",
+          "updated_at": "2026-06-01 20:25:01"
+        }
+      }
+    },
+    "skin": {
+      "display_modality": "Skin",
+      "active_version": "current_jetson_runtime_classifier",
+      "versions": {
+        "current_jetson_runtime_classifier": {
+          "modality": "skin",
+          "display_modality": "Skin",
+          "version": "current_jetson_runtime_classifier",
+          "display_version": "Current Jetson Runtime Classifier",
+          "task": "classification",
+          "model_path": "JETSON(fyp): jetson_deployment_package/skin_classifier_int8.engine",
+          "model_format": "engine",
+          "sha256": "0b417224970fdec5a5a02dd5e58e7cc5e10a238368cafa5eea71fb452eaabe11",
+          "labels_path": "config/model_slots/skin_labels.json",
+          "preprocessing_path": "",
+          "metrics_path": "",
+          "status": "jetson_runtime_detected",
+          "notes": "Detected from connected Jetson runtime package.",
+          "imported_at": "2026-06-01 20:25:01",
+          "updated_at": "2026-06-01 20:25:01"
+        },
+        "jetson_tier_ood_guard": {
+          "modality": "skin",
+          "display_modality": "Skin",
+          "version": "jetson_tier_ood_guard",
+          "display_version": "Jetson Tier / OOD Guard",
+          "task": "ood_guard_and_routing",
+          "model_path": "JETSON(fyp): jetson_deployment_package/skin_ood_guard_int8.engine",
+          "model_format": "engine",
+          "sha256": "f7491d108ac62e9a09b11d161d6926d3d6e272f82d7df35d22af9c3a53d4fab8",
+          "labels_path": "",
+          "preprocessing_path": "",
+          "metrics_path": "",
+          "status": "jetson_runtime_detected_ood_guard",
+          "notes": "Detected OOD/Tier guard from connected Jetson runtime package.",
+          "imported_at": "2026-06-01 20:25:01",
+          "updated_at": "2026-06-01 20:25:01"
+        }
+      }
+    },
+    "bone": {
+      "display_modality": "Bone",
+      "active_version": "current_jetson_runtime_classifier",
+      "versions": {
+        "current_jetson_runtime_classifier": {
+          "modality": "bone",
+          "display_modality": "Bone",
+          "version": "current_jetson_runtime_classifier",
+          "display_version": "Current Jetson Runtime Classifier",
+          "task": "classification",
+          "model_path": "JETSON(fyp): jetson_deployment_package/bone_classifier_int8.engine",
+          "model_format": "engine",
+          "sha256": "2b85478abd7355dabd3dff4fea3bdd493e290002c8e1a554b8ee7a5e55055b36",
+          "labels_path": "config/model_slots/bone_labels.json",
+          "preprocessing_path": "",
+          "metrics_path": "",
+          "status": "jetson_runtime_detected",
+          "notes": "Detected from connected Jetson runtime package.",
+          "imported_at": "2026-06-01 20:25:01",
+          "updated_at": "2026-06-01 20:25:01"
+        },
+        "jetson_tier_ood_guard": {
+          "modality": "bone",
+          "display_modality": "Bone",
+          "version": "jetson_tier_ood_guard",
+          "display_version": "Jetson Tier / OOD Guard",
+          "task": "ood_guard_and_routing",
+          "model_path": "JETSON(fyp): jetson_deployment_package/bone_ood_guard_int8.engine",
+          "model_format": "engine",
+          "sha256": "49991b2dc498be8edd96c25e74dbf52d00915ea8416ff47b3b7ad8868314491d",
+          "labels_path": "",
+          "preprocessing_path": "",
+          "metrics_path": "",
+          "status": "jetson_runtime_detected_ood_guard",
+          "notes": "Detected OOD/Tier guard from connected Jetson runtime package.",
+          "imported_at": "2026-06-01 20:25:01",
+          "updated_at": "2026-06-01 20:25:01"
+        }
+      }
+    }
+  },
+  "history": [
+    {
+      "time": "2026-06-01 20:06:18",
+      "action": "runtime_detect_model",
+      "modality": "unknown",
+      "version": "current_dummy_dual_output_onnx",
+      "model_path": "dummy_dual_output.onnx"
+    },
+    {
+      "time": "2026-06-01 20:06:24",
+      "action": "runtime_detect_model",
+      "modality": "unknown",
+      "version": "current_dummy_dual_output_onnx",
+      "model_path": "dummy_dual_output.onnx"
+    },
+    {
+      "time": "2026-06-01 20:06:41",
+      "action": "runtime_detect_model",
+      "modality": "unknown",
+      "version": "current_dummy_dual_output_onnx",
+      "model_path": "dummy_dual_output.onnx"
+    },
+    {
+      "time": "2026-06-01 20:06:45",
+      "action": "runtime_detect_model",
+      "modality": "unknown",
+      "version": "current_dummy_dual_output_onnx",
+      "model_path": "dummy_dual_output.onnx"
+    },
+    {
+      "time": "2026-06-01 20:06:45",
+      "action": "runtime_detect_model",
+      "modality": "unknown",
+      "version": "current_dummy_dual_output_onnx",
+      "model_path": "dummy_dual_output.onnx"
+    },
+    {
+      "time": "2026-06-01 20:11:52",
+      "action": "register_six_modalities_with_ood_guard",
+      "count": 12
+    },
+    {
+      "time": "2026-06-01 20:12:01",
+      "action": "register_six_modalities_with_ood_guard",
+      "count": 12
+    },
+    {
+      "time": "2026-06-01 20:15:35",
+      "action": "register_jetson_models_with_six_modalities_and_ood",
+      "jetson_files_detected": 36,
+      "local_files_detected": 0,
+      "rows": 12
+    },
+    {
+      "time": "2026-06-01 20:15:45",
+      "action": "register_jetson_models_with_six_modalities_and_ood",
+      "jetson_files_detected": 36,
+      "local_files_detected": 0,
+      "rows": 12
+    },
+    {
+      "time": "2026-06-01 20:20:22",
+      "action": "clean_register_jetson_runtime_models",
+      "jetson_files_detected": 36,
+      "local_files_detected": 0,
+      "rows": 12
+    },
+    {
+      "time": "2026-06-01 20:20:50",
+      "action": "clean_register_jetson_runtime_models",
+      "jetson_files_detected": 36,
+      "local_files_detected": 0,
+      "rows": 12
+    },
+    {
+      "time": "2026-06-01 20:24:15",
+      "action": "clean_register_jetson_runtime_models",
+      "jetson_files_detected": 36,
+      "local_files_detected": 0,
+      "rows": 12
+    },
+    {
+      "time": "2026-06-01 20:25:01",
+      "action": "clean_register_jetson_runtime_models",
+      "jetson_files_detected": 36,
+      "local_files_detected": 0,
+      "rows": 12
+    }
+  ]
+}
