@@ -1,5 +1,5 @@
 """
-dicom_listener.py — FYP: Accelerated Medical Imaging using ML Architectures
+dicom_listener.py - FYP: Accelerated Medical Imaging using ML Architectures
 
 
 Starts a DICOM SCP (Service Class Provider) that:
@@ -11,9 +11,9 @@ Starts a DICOM SCP (Service Class Provider) that:
   6. Forwards the file path to flask_api.py /analyze via HTTP POST
 
 Modality mapping aligns with:
-  - pipeline_skeleton.py  → payload["modality"] values
-  - db_schema.sql         → dicom_studies.modality CHECK constraint
-  - gpio_alerts.py        → CRITICAL_FINDINGS per modality
+  - pipeline_skeleton.py  -> payload["modality"] values
+  - db_schema.sql         -> dicom_studies.modality CHECK constraint
+  - gpio_alerts.py        -> CRITICAL_FINDINGS per modality
 
 Install dependency:
     pip install pynetdicom pydicom requests
@@ -57,11 +57,11 @@ except ImportError:
 DEFAULT_HOST        = "0.0.0.0"
 DEFAULT_PORT        = 11112          # Standard DICOM port
 DEFAULT_OUTPUT_DIR  = "./received_dicoms"
-FLASK_ANALYZE_URL   = "http://127.0.0.1:5000/analyze"
+FLASK_ANALYZE_URL   = "http://10.42.0.51:5000/analyze"
 AE_TITLE            = "FYP_LISTENER"  # This SCP's Application Entity title
 ORTHANC_AE_TITLE    = "ORTHANC"       # Orthanc's AE title (set in Orthanc config)
 
-# ── Modality tag (0008,0060) value → pipeline_skeleton.py payload["modality"] ─
+# ── Modality tag (0008,0060) value -> pipeline_skeleton.py payload["modality"] ─
 # Maps standard DICOM modality codes to your project's internal modality strings
 # Aligns with db_schema.sql CHECK constraint and gpio_alerts.py CRITICAL_FINDINGS
 DICOM_MODALITY_MAP = {
@@ -72,16 +72,16 @@ DICOM_MODALITY_MAP = {
     "CF":  "retinal",       # Color Fundus (some vendors use this)
     # Skin Lesion (dermoscopy)
     "XC":  "skin",          # External Camera / Dermoscopy
-    "DX":  "chest_xray",    # Digital X-Ray → Chest X-Ray
-    "CR":  "chest_xray",    # Computed Radiography → also Chest or Bone
-    # Bone Fracture X-Ray — disambiguated by body part tag if needed
+    "DX":  "chest_xray",    # Digital X-Ray -> Chest X-Ray
+    "CR":  "chest_xray",    # Computed Radiography -> also Chest or Bone
+    # Bone Fracture X-Ray - disambiguated by body part tag if needed
     "DR":  "bone",          # Digital Radiography (bone)
     # ECG / Waveform
     "ECG": "ecg",
     "HD":  "ecg",           # Hemodynamic Waveform (some ECG vendors)
 }
 
-# Fallback: if body part examined tag (0018,0015) contains these strings → bone
+# Fallback: if body part examined tag (0018,0015) contains these strings -> bone
 BONE_BODY_PARTS = {"KNEE", "HIP", "WRIST", "SPINE", "SHOULDER", "ANKLE",
                    "ELBOW", "FOOT", "HAND", "FEMUR", "TIBIA", "RADIUS"}
 
@@ -116,7 +116,7 @@ def detect_modality(ds: Dataset) -> str:
     dicom_modality = getattr(ds, "Modality", "").strip().upper()
     mapped = DICOM_MODALITY_MAP.get(dicom_modality)
 
-    # Disambiguate DX/CR → chest_xray vs bone using body part tag
+    # Disambiguate DX/CR -> chest_xray vs bone using body part tag
     if dicom_modality in ("DX", "CR"):
         body_part = getattr(ds, "BodyPartExamined", "").strip().upper()
         if body_part in BONE_BODY_PARTS:
@@ -129,7 +129,7 @@ def detect_modality(ds: Dataset) -> str:
                     f"Defaulting to 'brain_mri'.")
         mapped = "brain_mri"
 
-    log.info(f"[MODALITY] DICOM tag '{dicom_modality}' → pipeline modality '{mapped}'")
+    log.info(f"[MODALITY] DICOM tag '{dicom_modality}' -> pipeline modality '{mapped}'")
     return mapped
 
 
@@ -150,7 +150,7 @@ def build_output_path(output_dir: str, modality: str,
     """
     folder = os.path.join(output_dir, modality, patient_id)
     os.makedirs(folder, exist_ok=True)
-    # Use StudyInstanceUID as filename — guaranteed unique per DICOM standard
+    # Use StudyInstanceUID as filename - guaranteed unique per DICOM standard
     safe_uid = study_uid.replace(".", "_")
     return os.path.join(folder, f"{safe_uid}.dcm")
 
@@ -161,41 +161,100 @@ def build_output_path(output_dir: str, modality: str,
 
 def forward_to_flask(dcm_path: str, modality: str, patient_id: str):
     """
-    POST the saved .dcm file to flask_api.py /analyze endpoint.
-    Runs in a background thread so it never blocks the DICOM handler.
-
-    flask_api.py /analyze contract:
-        POST multipart/form-data: file=<.dcm bytes>, patient_id=<str>
-    Response contract (from flask_api.py):
-        { status, modality, prediction: {class, mean_confidence, uncertainty},
-          ood_flag, routing_tier, llm_report, gradcam_base64 }
+    Convert received DICOM to PNG and forward PNG to Flask /analyze.
+    The inference API expects a normal image file, not raw .dcm bytes.
     """
-    def _post():
+    def _dicom_to_png(src_path: str) -> str:
+        import tempfile
+        import numpy as np
+        import pydicom
+        from PIL import Image
+
+        ds = pydicom.dcmread(src_path, force=True)
+        arr = ds.pixel_array.astype(np.float32)
+
+        # Apply rescale if available.
         try:
-            with open(dcm_path, "rb") as f:
-                files   = {"file": (os.path.basename(dcm_path), f, "application/dicom")}
-                data    = {"patient_id": patient_id, "modality": modality}
-                resp    = requests.post(FLASK_ANALYZE_URL, files=files,
-                                        data=data, timeout=30)
+            slope = float(getattr(ds, "RescaleSlope", 1.0))
+            intercept = float(getattr(ds, "RescaleIntercept", 0.0))
+            arr = arr * slope + intercept
+        except Exception:
+            pass
+
+        # Window/normalize to 8-bit.
+        arr = arr - np.min(arr)
+        max_val = np.max(arr)
+        if max_val > 0:
+            arr = arr / max_val
+        arr = (arr * 255.0).clip(0, 255).astype(np.uint8)
+
+        img = Image.fromarray(arr)
+        img = img.convert("RGB")
+
+        out_path = tempfile.NamedTemporaryFile(delete=False, suffix=".png").name
+        img.save(out_path)
+        return out_path
+
+    def _post():
+        png_path = None
+        try:
+            png_path = _dicom_to_png(dcm_path)
+
+            with open(png_path, "rb") as f:
+                files = {
+                    "file": (
+                        os.path.basename(png_path),
+                        f,
+                        "image/png"
+                    )
+                }
+                data = {
+                    "patient_id": patient_id,
+                    "modality": modality,
+                    "language": "English",
+                    "source": "dicom_cstore",
+                    "dicom_path": dcm_path
+                }
+
+                resp = requests.post(
+                    FLASK_ANALYZE_URL,
+                    files=files,
+                    data=data,
+                    timeout=60
+                )
+
             if resp.status_code == 200:
                 result = resp.json()
-                log.info(f"[FLASK] /analyze response → "
-                         f"class={result.get('prediction', {}).get('class')} "
-                         f"tier={result.get('routing_tier')}")
+                pred = result.get("prediction", {})
+                if not isinstance(pred, dict):
+                    pred = {}
+                log.info(
+                    "[FLASK] /analyze OK from DICOM C-STORE | "
+                    f"patient={patient_id} modality={modality} "
+                    f"class={pred.get('class')} tier={result.get('routing_tier')}"
+                )
             else:
-                log.warning(f"[FLASK] /analyze returned HTTP {resp.status_code}")
+                log.warning(f"[FLASK] /analyze returned HTTP {resp.status_code}: {resp.text[:300]}")
+
         except requests.exceptions.ConnectionError:
-            log.warning("[FLASK] Flask API not running — skipping forward. "
-                        "Start flask_api.py on port 5000.")
+            log.warning(
+                "[FLASK] Flask API not reachable - DICOM was saved but not analyzed."
+            )
         except Exception as e:
-            log.error(f"[FLASK] Forward failed: {e}")
+            log.error(f"[FLASK] DICOM forward failed: {e}")
+        finally:
+            if png_path:
+                try:
+                    os.remove(png_path)
+                except Exception:
+                    pass
 
     t = threading.Thread(target=_post, daemon=True)
     t.start()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  CORE EVENT HANDLER — called by pynetdicom on every C-STORE
+#  CORE EVENT HANDLER - called by pynetdicom on every C-STORE
 # ══════════════════════════════════════════════════════════════════════════════
 
 def build_handle_store(output_dir: str, db: "DatabaseManager | None"):
@@ -216,8 +275,8 @@ def build_handle_store(output_dir: str, db: "DatabaseManager | None"):
           6. Return 0x0000 (Success) to Orthanc
 
         Returns:
-            0x0000  — Success (Orthanc marks transfer complete)
-            0xA700  — Out of resources (on disk/DB error)
+            0x0000  - Success (Orthanc marks transfer complete)
+            0xA700  - Out of resources (on disk/DB error)
         """
         receive_time = time.time()
 
@@ -227,18 +286,18 @@ def build_handle_store(output_dir: str, db: "DatabaseManager | None"):
             ds.file_meta = event.file_meta
         except Exception as e:
             log.error(f"[HANDLER] Failed to parse DICOM dataset: {e}")
-            return 0xA700  # Failure — out of resources
+            return 0xA700  # Failure - out of resources
 
         # ── 2. Extract key DICOM tags ────────────────────────────────────────
-        # PatientID tag (0010,0020) — map to pipeline "PT-{n}" format if absent
+        # PatientID tag (0010,0020) - map to pipeline "PT-{n}" format if absent
         raw_patient_id = getattr(ds, "PatientID", "").strip()
         patient_id     = raw_patient_id if raw_patient_id else f"PT-UNKNOWN-{int(receive_time)}"
 
-        # StudyInstanceUID tag (0020,000D) — primary key in dicom_studies
+        # StudyInstanceUID tag (0020,000D) - primary key in dicom_studies
         study_uid      = getattr(ds, "StudyInstanceUID", "").strip()
         if not study_uid:
             study_uid  = f"GENERATED.{int(receive_time * 1000)}"
-            log.warning(f"[HANDLER] Missing StudyInstanceUID — generated: {study_uid}")
+            log.warning(f"[HANDLER] Missing StudyInstanceUID - generated: {study_uid}")
 
         # StudyDate (0008,0020) and StudyTime (0008,0030)
         study_date     = getattr(ds, "StudyDate", None)
@@ -278,19 +337,26 @@ def build_handle_store(output_dir: str, db: "DatabaseManager | None"):
                     study_time      = str(study_time_tag) if study_time_tag else None
                 )
                 if inserted:
-                    log.info(f"[DB] Study inserted: {study_uid} → {modality}")
+                    log.info(f"[DB] Study inserted: {study_uid} -> {modality}")
                 else:
                     log.warning(f"[DB] insert_study returned False for {study_uid} "
-                                f"(may already exist — INSERT OR IGNORE)")
+                                f"(may already exist - INSERT OR IGNORE)")
             except Exception as e:
                 log.error(f"[DB] insert_study failed: {e}")
-                # Don't return failure — file is saved, DB miss is recoverable
+                # Don't return failure - file is saved, DB miss is recoverable
 
         # ── 6. Forward to Flask API (background, non-blocking) ───────────────
         forward_to_flask(dcm_path, modality, patient_id)
 
         # ── 7. Return DICOM Success status to Orthanc ────────────────────────
-        log.info(f"[HANDLER] C-STORE complete → returning 0x0000 (Success) "
+        # force-forward saved DICOM to Flask even if DB insert_study returned False
+        try:
+            forward_to_flask(save_path, modality, patient_id)
+            log.info(f"[FLASK] Forward queued for saved DICOM | patient={patient_id} modality={modality}")
+        except Exception as e:
+            log.error(f"[FLASK] Could not queue DICOM forward: {e}")
+
+        log.info(f"[HANDLER] C-STORE complete -> returning 0x0000 (Success) "
                  f"to Orthanc for {study_uid}")
         return 0x0000  # DICOM Success
 
@@ -327,7 +393,7 @@ def start_listener(host: str, port: int, output_dir: str):
     # This covers all 6 modalities: Brain, Retinal, Skin, Chest, Bone, ECG
     ae.supported_contexts = AllStoragePresentationContexts
 
-    # Also accept C-ECHO (Verification) — lets Orthanc do a "ping" test
+    # Also accept C-ECHO (Verification) - lets Orthanc do a "ping" test
     ae.add_supported_context(VerificationSOPClass)
 
     # ── Register event handler ────────────────────────────────────────────────
@@ -346,13 +412,13 @@ def start_listener(host: str, port: int, output_dir: str):
     try:
         ae.start_server(
             (host, port),
-            block=True,          # blocking — runs until KeyboardInterrupt
+            block=True,          # blocking - runs until KeyboardInterrupt
             evt_handlers=handlers
         )
     except KeyboardInterrupt:
         log.info("[SYSTEM] Listener stopped by user (KeyboardInterrupt).")
     except OSError as e:
-        log.error(f"[SYSTEM] Failed to bind {host}:{port} — {e}")
+        log.error(f"[SYSTEM] Failed to bind {host}:{port} - {e}")
         log.error("[SYSTEM] Is port 11112 already in use-> Try --port 11113")
         sys.exit(1)
 
@@ -381,12 +447,12 @@ def run_simulation(output_dir: str):
     # Test cases mirroring gpio_alerts.py test_cases
     test_cases = [
         # (PatientID, StudyUID,           Modality, BodyPart,  Description)
-        ("PT-1",  "1.2.3.4.5.6.1",  "MR",  "",       "Brain MRI — Glioma suspect"),
-        ("PT-2",  "1.2.3.4.5.6.2",  "DX",  "CHEST",  "Chest X-Ray — Pneumonia screen"),
-        ("PT-3",  "1.2.3.4.5.6.3",  "DX",  "KNEE",   "Bone X-Ray — Fracture screen"),
-        ("PT-4",  "1.2.3.4.5.6.4",  "ECG", "",       "ECG — Arrhythmia screen"),
-        ("PT-5",  "1.2.3.4.5.6.5",  "XC",  "",       "Skin Dermoscopy — MEL screen"),
-        ("PT-6",  "1.2.3.4.5.6.6",  "OP",  "",       "Retinal Fundus — APTOS screen"),
+        ("PT-1",  "1.2.3.4.5.6.1",  "MR",  "",       "Brain MRI - Glioma suspect"),
+        ("PT-2",  "1.2.3.4.5.6.2",  "DX",  "CHEST",  "Chest X-Ray - Pneumonia screen"),
+        ("PT-3",  "1.2.3.4.5.6.3",  "DX",  "KNEE",   "Bone X-Ray - Fracture screen"),
+        ("PT-4",  "1.2.3.4.5.6.4",  "ECG", "",       "ECG - Arrhythmia screen"),
+        ("PT-5",  "1.2.3.4.5.6.5",  "XC",  "",       "Skin Dermoscopy - MEL screen"),
+        ("PT-6",  "1.2.3.4.5.6.6",  "OP",  "",       "Retinal Fundus - APTOS screen"),
     ]
 
     os.makedirs(output_dir, exist_ok=True)
@@ -435,7 +501,7 @@ def run_simulation(output_dir: str):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="DICOM SCP Listener — FYP Medical Imaging Pipeline (M3 Day 3)"
+        description="DICOM SCP Listener - FYP Medical Imaging Pipeline (M3 Day 3)"
     )
     parser.add_argument("--host",     default=DEFAULT_HOST,
                         help=f"Bind address (default: {DEFAULT_HOST})")
