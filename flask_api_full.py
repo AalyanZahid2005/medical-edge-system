@@ -1385,6 +1385,207 @@ def history_endpoint_final():
 
 
 
+
+# ---------------------------------------------------------------------
+# HL7 FHIR / EMR Export Route - M4 Final Defense
+# ---------------------------------------------------------------------
+@app.route("/fhir_export", methods=["POST"])
+def fhir_export():
+    """
+    Export latest patient inference as an HL7 FHIR R4 DiagnosticReport.
+    Demo-safe behavior:
+    - Always returns a valid FHIR DiagnosticReport payload.
+    - If FHIR_SERVER_URL is configured, it tries to POST to that EMR/FHIR server.
+    - If no EMR server is configured, it returns local demo success for final defense.
+    """
+    import os
+    import sqlite3
+    import uuid
+    import datetime
+    import requests
+
+    try:
+        req = request.get_json(silent=True) or {}
+        patient_id = str(req.get("patient_id", "")).strip()
+
+        if not patient_id:
+            return jsonify({
+                "status": "error",
+                "message": "patient_id is required"
+            }), 400
+
+        db_path = "/app/fyp_medical.db"
+        if not os.path.exists(db_path):
+            db_path = "fyp_medical.db"
+
+        latest = None
+
+        if os.path.exists(db_path):
+            conn = sqlite3.connect(db_path)
+            cur = conn.cursor()
+
+            latest = cur.execute("""
+                SELECT
+                    r.record_id,
+                    s.patient_id,
+                    r.modality,
+                    r.predicted_class,
+                    r.mean_confidence,
+                    r.uncertainty_percent,
+                    r.routing_tier,
+                    r.llm_report,
+                    r.inferred_at,
+                    r.gpio_alert_type
+                FROM inference_records r
+                LEFT JOIN dicom_studies s ON s.study_uid = r.study_uid
+                WHERE s.patient_id = ?
+                ORDER BY r.record_id DESC
+                LIMIT 1
+            """, (patient_id,)).fetchone()
+
+            conn.close()
+
+        if latest:
+            (
+                record_id,
+                patient_id_db,
+                modality,
+                predicted_class,
+                mean_confidence,
+                uncertainty_percent,
+                routing_tier,
+                llm_report,
+                inferred_at,
+                gpio_alert_type
+            ) = latest
+        else:
+            record_id = "NA"
+            patient_id_db = patient_id
+            modality = req.get("modality", "unknown")
+            predicted_class = req.get("prediction", "No latest inference record found")
+            mean_confidence = req.get("confidence", 0.0)
+            uncertainty_percent = req.get("uncertainty", 0.0)
+            routing_tier = req.get("routing_tier", 3)
+            llm_report = "No latest inference record found for this patient. Export generated as demo FHIR payload."
+            inferred_at = datetime.datetime.utcnow().isoformat()
+            gpio_alert_type = "NONE"
+
+        now = datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+
+        diagnostic_report = {
+            "resourceType": "DiagnosticReport",
+            "id": "medai-report-{}".format(record_id),
+            "status": "final",
+            "category": [
+                {
+                    "coding": [
+                        {
+                            "system": "http://terminology.hl7.org/CodeSystem/v2-0074",
+                            "code": "RAD",
+                            "display": "Radiology"
+                        }
+                    ]
+                }
+            ],
+            "code": {
+                "coding": [
+                    {
+                        "system": "http://loinc.org",
+                        "code": "18748-4",
+                        "display": "Diagnostic imaging study"
+                    }
+                ],
+                "text": "MEDAI AI-assisted diagnostic report"
+            },
+            "subject": {
+                "reference": "Patient/{}".format(patient_id_db),
+                "display": str(patient_id_db)
+            },
+            "effectiveDateTime": str(inferred_at or now),
+            "issued": now,
+            "performer": [
+                {
+                    "display": "MEDAI Edge Diagnostic Server - Jetson Nano"
+                }
+            ],
+            "conclusion": str(llm_report or ""),
+            "extension": [
+                {
+                    "url": "https://uet-medai.example/fhir/StructureDefinition/modality",
+                    "valueString": str(modality)
+                },
+                {
+                    "url": "https://uet-medai.example/fhir/StructureDefinition/ai-prediction",
+                    "valueString": str(predicted_class)
+                },
+                {
+                    "url": "https://uet-medai.example/fhir/StructureDefinition/mean-confidence",
+                    "valueDecimal": float(mean_confidence or 0.0)
+                },
+                {
+                    "url": "https://uet-medai.example/fhir/StructureDefinition/uncertainty-percent",
+                    "valueDecimal": float(uncertainty_percent or 0.0)
+                },
+                {
+                    "url": "https://uet-medai.example/fhir/StructureDefinition/routing-tier",
+                    "valueInteger": int(routing_tier or 3)
+                },
+                {
+                    "url": "https://uet-medai.example/fhir/StructureDefinition/gpio-alert",
+                    "valueString": str(gpio_alert_type or "NONE")
+                }
+            ]
+        }
+
+        fhir_server = os.environ.get("FHIR_SERVER_URL", "").strip()
+        emr_response = None
+
+        if fhir_server:
+            try:
+                target = fhir_server.rstrip("/") + "/DiagnosticReport"
+                resp = requests.post(
+                    target,
+                    json=diagnostic_report,
+                    headers={"Content-Type": "application/fhir+json"},
+                    timeout=10
+                )
+                emr_response = {
+                    "target": target,
+                    "status_code": resp.status_code,
+                    "ok": 200 <= resp.status_code < 300,
+                    "body_preview": resp.text[:500]
+                }
+            except Exception as e:
+                emr_response = {
+                    "target": fhir_server,
+                    "ok": False,
+                    "error": str(e)
+                }
+        else:
+            emr_response = {
+                "target": "LOCAL_DEMO_MODE",
+                "ok": True,
+                "message": "No FHIR_SERVER_URL configured. Returning valid FHIR DiagnosticReport payload for demo."
+            }
+
+        return jsonify({
+            "status": "ok",
+            "message": "FHIR DiagnosticReport generated",
+            "patient_id": patient_id_db,
+            "record_id": record_id,
+            "emr_response": emr_response,
+            "fhir": diagnostic_report
+        }), 200
+
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": "FHIR export failed",
+            "error": str(e)
+        }), 500
+
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Flask API Full — FYP Medical Imaging (M3 Days 5-20)"
