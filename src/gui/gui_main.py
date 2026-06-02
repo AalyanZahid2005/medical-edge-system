@@ -6974,6 +6974,4700 @@ def _AALYAN_MODELS_build_tab(gui_self):
 # ============================================================
 
 
+
+
+# ============================================================
+# AALYAN LIQUID UI PHASE 1
+# Apple-like liquid tab styling + smooth fade tab transition.
+# UI-only patch. Does not touch backend/API/DICOM/FHIR/PDF.
+# ============================================================
+def _AALYAN_LIQUID_apply_tabs(gui_self):
+    try:
+        from PyQt5.QtWidgets import QGraphicsOpacityEffect
+        from PyQt5.QtCore import QPropertyAnimation, QEasingCurve, QTimer
+    except Exception as e:
+        print("[AALYAN LIQUID UI] Qt animation import failed:", e)
+        return
+
+    try:
+        tabs = getattr(gui_self, "tabs", None)
+        if tabs is None:
+            return
+
+        if getattr(gui_self, "_aalyan_liquid_tabs_installed", False):
+            return
+
+        gui_self._aalyan_liquid_tabs_installed = True
+        gui_self._aalyan_liquid_tab_anim = None
+
+        # ----------------------------------------------------
+        # Liquid / glass tab bar styling
+        # ----------------------------------------------------
+        tabs.setDocumentMode(True)
+        tabs.setMovable(False)
+
+        liquid_style = """
+        QTabWidget::pane {
+            border: 0px;
+            border-top: 1px solid rgba(0, 217, 255, 180);
+            background: #071019;
+            margin-top: 8px;
+        }
+
+        QTabBar {
+            background: transparent;
+        }
+
+        QTabBar::tab {
+            background: rgba(10, 22, 34, 180);
+            color: #9FDDF2;
+            border: 1px solid rgba(0, 217, 255, 150);
+            border-radius: 12px;
+            padding: 6px 14px;
+            margin: 3px 3px;
+            font-weight: 800;
+            min-width: 62px;
+        }
+
+        QTabBar::tab:selected {
+            background: qlineargradient(
+                x1:0, y1:0, x2:1, y2:1,
+                stop:0 rgba(0, 217, 255, 255),
+                stop:0.55 rgba(0, 155, 210, 245),
+                stop:1 rgba(0, 255, 185, 230)
+            );
+            color: #021018;
+            border: 1px solid rgba(180, 255, 255, 255);
+            padding: 7px 18px;
+        }
+
+        QTabBar::tab:hover:!selected {
+            background: rgba(0, 217, 255, 45);
+            color: #EAFBFF;
+            border: 1px solid rgba(0, 217, 255, 230);
+        }
+        """
+
+        old_style = tabs.styleSheet() or ""
+        if "AALYAN_LIQUID_TAB_STYLE" not in old_style:
+            tabs.setStyleSheet(old_style + "\n/* AALYAN_LIQUID_TAB_STYLE */\n" + liquid_style)
+
+        # ----------------------------------------------------
+        # Smooth fade-in animation on tab change
+        # ----------------------------------------------------
+        def animate_current_tab(index):
+            try:
+                widget = tabs.widget(index)
+                if widget is None:
+                    return
+
+                effect = QGraphicsOpacityEffect(widget)
+                widget.setGraphicsEffect(effect)
+
+                anim = QPropertyAnimation(effect, b"opacity", widget)
+                anim.setDuration(260)
+                anim.setStartValue(0.18)
+                anim.setEndValue(1.0)
+                anim.setEasingCurve(QEasingCurve.OutCubic)
+
+                def cleanup():
+                    try:
+                        widget.setGraphicsEffect(None)
+                    except Exception:
+                        pass
+
+                anim.finished.connect(cleanup)
+                gui_self._aalyan_liquid_tab_anim = anim
+                anim.start()
+            except Exception as e:
+                print("[AALYAN LIQUID UI] tab animation warning:", e)
+
+        try:
+            tabs.currentChanged.disconnect()
+        except Exception:
+            pass
+
+        tabs.currentChanged.connect(animate_current_tab)
+
+        # Animate first visible tab shortly after startup
+        QTimer.singleShot(300, lambda: animate_current_tab(tabs.currentIndex()))
+
+        print("[AALYAN LIQUID UI] Phase 1 installed: liquid tabs + fade transitions.")
+
+    except Exception as e:
+        print("[AALYAN LIQUID UI] apply failed:", e)
+
+
+def _AALYAN_LIQUID_patch_main_windows():
+    """
+    Wrap QMainWindow subclass __init__ safely.
+    After original GUI builds self.tabs, apply liquid tab animation.
+    """
+    try:
+        from PyQt5.QtWidgets import QMainWindow
+        from PyQt5.QtCore import QTimer
+    except Exception as e:
+        print("[AALYAN LIQUID UI] patch import failed:", e)
+        return
+
+    patched = 0
+
+    for name, obj in list(globals().items()):
+        try:
+            if not isinstance(obj, type):
+                continue
+
+            if not issubclass(obj, QMainWindow):
+                continue
+
+            if getattr(obj, "_aalyan_liquid_init_wrapped", False):
+                continue
+
+            old_init = obj.__init__
+
+            def new_init(self, *args, __old_init=old_init, **kwargs):
+                __old_init(self, *args, **kwargs)
+                try:
+                    QTimer.singleShot(500, lambda: _AALYAN_LIQUID_apply_tabs(self))
+                    QTimer.singleShot(1200, lambda: _AALYAN_LIQUID_apply_tabs(self))
+                except Exception as e:
+                    print("[AALYAN LIQUID UI] delayed install failed:", e)
+
+            obj.__init__ = new_init
+            obj._aalyan_liquid_init_wrapped = True
+            patched += 1
+
+        except Exception:
+            pass
+
+    print(f"[AALYAN LIQUID UI] Main windows patched: {patched}")
+
+
+_AALYAN_LIQUID_patch_main_windows()
+
+# ============================================================
+# END AALYAN LIQUID UI PHASE 1
+# ============================================================
+
+
+
+
+# ============================================================
+# AALYAN LIQUID UI PHASE 2
+# Apple-like Scan page glass polish.
+# UI-only patch. Does not touch pipeline/backend/PDF/DICOM/FHIR.
+# ============================================================
+def _AALYAN_LIQUID_phase2_polish_scan(gui_self):
+    try:
+        from PyQt5.QtWidgets import (
+            QPushButton, QComboBox, QLineEdit, QTextEdit, QPlainTextEdit,
+            QLabel, QFrame, QGroupBox, QWidget, QGraphicsDropShadowEffect
+        )
+        from PyQt5.QtGui import QColor
+        from PyQt5.QtCore import QTimer
+    except Exception as e:
+        print("[AALYAN LIQUID PHASE2] Qt import failed:", e)
+        return
+
+    try:
+        tabs = getattr(gui_self, "tabs", None)
+        if tabs is None:
+            return
+
+        scan_idx = -1
+        for i in range(tabs.count()):
+            if str(tabs.tabText(i)).strip().lower() == "scan":
+                scan_idx = i
+                break
+
+        if scan_idx < 0:
+            print("[AALYAN LIQUID PHASE2] Scan tab not found.")
+            return
+
+        scan = tabs.widget(scan_idx)
+        if scan is None:
+            return
+
+        if getattr(gui_self, "_aalyan_liquid_scan_phase2_done", False):
+            return
+
+        gui_self._aalyan_liquid_scan_phase2_done = True
+
+        # ----------------------------------------------------
+        # Main scan-page glass styling
+        # ----------------------------------------------------
+        scan_style = """
+        QWidget {
+            background: transparent;
+            color: #EAFBFF;
+            font-family: "Inter", "SF Pro Display", "Segoe UI", "Arial";
+            font-size: 12px;
+        }
+
+        QLabel {
+            color: #D8F7FF;
+            font-weight: 650;
+        }
+
+        QFrame, QGroupBox {
+            background: rgba(13, 26, 39, 185);
+            border: 1px solid rgba(95, 185, 230, 70);
+            border-radius: 16px;
+        }
+
+        QComboBox, QLineEdit {
+            background: rgba(10, 18, 30, 210);
+            color: #F2FCFF;
+            border: 1px solid rgba(135, 210, 255, 75);
+            border-radius: 11px;
+            min-height: 30px;
+            padding: 5px 10px;
+            selection-background-color: #00D9FF;
+            selection-color: #001018;
+        }
+
+        QComboBox:hover, QLineEdit:hover {
+            border: 1px solid rgba(0, 217, 255, 190);
+            background: rgba(12, 28, 42, 235);
+        }
+
+        QComboBox:focus, QLineEdit:focus {
+            border: 1px solid rgba(0, 255, 190, 220);
+        }
+
+        QComboBox::drop-down {
+            border: 0px;
+            width: 28px;
+        }
+
+        QPushButton {
+            background: rgba(13, 24, 38, 210);
+            color: #EAFBFF;
+            border: 1px solid rgba(0, 217, 255, 130);
+            border-radius: 13px;
+            padding: 8px 14px;
+            min-height: 30px;
+            font-weight: 850;
+        }
+
+        QPushButton:hover {
+            background: qlineargradient(
+                x1:0, y1:0, x2:1, y2:1,
+                stop:0 rgba(0, 217, 255, 245),
+                stop:1 rgba(0, 255, 185, 220)
+            );
+            color: #001018;
+            border: 1px solid rgba(220, 255, 255, 255);
+        }
+
+        QPushButton:pressed {
+            background: rgba(0, 150, 190, 240);
+            color: #001018;
+            padding-top: 10px;
+            padding-bottom: 6px;
+        }
+
+        QTextEdit, QPlainTextEdit {
+            background: rgba(13, 24, 38, 220);
+            color: #DFFAFF;
+            border: 1px solid rgba(120, 200, 255, 70);
+            border-radius: 16px;
+            padding: 12px;
+            selection-background-color: #00D9FF;
+            selection-color: #001018;
+        }
+
+        QCheckBox {
+            color: #EAFBFF;
+            font-weight: 700;
+            spacing: 8px;
+        }
+
+        QScrollArea {
+            border: 0px;
+            background: transparent;
+        }
+
+        QScrollBar:vertical {
+            background: rgba(8, 15, 24, 150);
+            width: 10px;
+            border-radius: 5px;
+        }
+
+        QScrollBar::handle:vertical {
+            background: rgba(0, 217, 255, 150);
+            border-radius: 5px;
+            min-height: 40px;
+        }
+
+        QScrollBar::handle:vertical:hover {
+            background: rgba(0, 255, 190, 220);
+        }
+
+        QScrollBar::add-line:vertical,
+        QScrollBar::sub-line:vertical {
+            height: 0px;
+        }
+        """
+
+        old = scan.styleSheet() or ""
+        if "AALYAN_LIQUID_SCAN_PHASE2_STYLE" not in old:
+            scan.setStyleSheet(old + "\n/* AALYAN_LIQUID_SCAN_PHASE2_STYLE */\n" + scan_style)
+
+        # ----------------------------------------------------
+        # Special colors for important buttons by text
+        # ----------------------------------------------------
+        for btn in scan.findChildren(QPushButton):
+            try:
+                t = btn.text().strip().lower()
+
+                if "run pipeline" in t:
+                    btn.setMinimumHeight(42)
+                    btn.setStyleSheet("""
+                    QPushButton {
+                        background: qlineargradient(
+                            x1:0, y1:0, x2:1, y2:1,
+                            stop:0 #00D9FF,
+                            stop:1 #00FFB9
+                        );
+                        color: #001018;
+                        border: 0px;
+                        border-radius: 15px;
+                        padding: 10px 16px;
+                        font-weight: 950;
+                        font-size: 14px;
+                    }
+                    QPushButton:hover {
+                        background: qlineargradient(
+                            x1:0, y1:0, x2:1, y2:1,
+                            stop:0 #70F0FF,
+                            stop:1 #74FFD4
+                        );
+                    }
+                    QPushButton:pressed {
+                        background: #00A7D6;
+                        padding-top: 12px;
+                        padding-bottom: 8px;
+                    }
+                    """)
+
+                elif "upload" in t or "drop dicom" in t:
+                    btn.setMinimumHeight(40)
+                    btn.setStyleSheet("""
+                    QPushButton {
+                        background: rgba(0, 217, 255, 35);
+                        color: #6FEAFF;
+                        border: 1px dashed rgba(0, 217, 255, 190);
+                        border-radius: 15px;
+                        padding: 9px 14px;
+                        font-weight: 900;
+                    }
+                    QPushButton:hover {
+                        background: rgba(0, 217, 255, 85);
+                        color: #FFFFFF;
+                        border: 1px solid rgba(0, 255, 190, 230);
+                    }
+                    """)
+
+                elif "push to emr" in t or "fhir" in t:
+                    btn.setMinimumHeight(40)
+                    btn.setStyleSheet("""
+                    QPushButton {
+                        background: qlineargradient(
+                            x1:0, y1:0, x2:1, y2:1,
+                            stop:0 #00E676,
+                            stop:1 #00D9FF
+                        );
+                        color: #001018;
+                        border: 0px;
+                        border-radius: 15px;
+                        padding: 9px 14px;
+                        font-weight: 950;
+                    }
+                    QPushButton:hover {
+                        background: qlineargradient(
+                            x1:0, y1:0, x2:1, y2:1,
+                            stop:0 #74FFAA,
+                            stop:1 #7BEFFF
+                        );
+                    }
+                    """)
+
+                elif "generate pdf" in t:
+                    btn.setMinimumHeight(40)
+                    btn.setStyleSheet("""
+                    QPushButton {
+                        background: rgba(0, 217, 255, 210);
+                        color: #001018;
+                        border: 0px;
+                        border-radius: 15px;
+                        padding: 9px 14px;
+                        font-weight: 950;
+                    }
+                    QPushButton:hover {
+                        background: rgba(100, 238, 255, 255);
+                    }
+                    """)
+
+            except Exception:
+                pass
+
+        # ----------------------------------------------------
+        # Add soft shadow to larger cards/text areas
+        # ----------------------------------------------------
+        shadow_count = 0
+        for w in scan.findChildren(QWidget):
+            try:
+                if isinstance(w, (QTextEdit, QPlainTextEdit, QFrame, QGroupBox)):
+                    if w.width() < 100 and w.height() < 50:
+                        continue
+
+                    if getattr(w, "_aalyan_liquid_shadow", False):
+                        continue
+
+                    shadow = QGraphicsDropShadowEffect(w)
+                    shadow.setBlurRadius(22)
+                    shadow.setOffset(0, 6)
+                    shadow.setColor(QColor(0, 0, 0, 110))
+                    w.setGraphicsEffect(shadow)
+                    w._aalyan_liquid_shadow = True
+                    shadow_count += 1
+
+                    if shadow_count >= 12:
+                        break
+            except Exception:
+                pass
+
+        # ----------------------------------------------------
+        # Result labels slightly bigger and cleaner
+        # ----------------------------------------------------
+        for lbl in scan.findChildren(QLabel):
+            try:
+                txt = lbl.text().strip().lower()
+
+                if "predicted class" in txt or "mc uncertainty" in txt or "routing tier" in txt or "ood status" in txt:
+                    lbl.setStyleSheet("color:#8FD6FF; font-weight:900; font-size:12px;")
+
+                if "pending" in txt:
+                    lbl.setStyleSheet("color:#00D9FF; font-weight:950; font-size:22px;")
+            except Exception:
+                pass
+
+        print("[AALYAN LIQUID UI] Phase 2 installed: Scan page glass polish.")
+
+    except Exception as e:
+        print("[AALYAN LIQUID PHASE2] apply failed:", e)
+
+
+def _AALYAN_LIQUID_phase2_patch_windows():
+    try:
+        from PyQt5.QtWidgets import QMainWindow
+        from PyQt5.QtCore import QTimer
+    except Exception as e:
+        print("[AALYAN LIQUID PHASE2] patch import failed:", e)
+        return
+
+    patched = 0
+
+    for name, obj in list(globals().items()):
+        try:
+            if not isinstance(obj, type):
+                continue
+            if not issubclass(obj, QMainWindow):
+                continue
+            if getattr(obj, "_aalyan_liquid_phase2_wrapped", False):
+                continue
+
+            old_init = obj.__init__
+
+            def new_init(self, *args, __old_init=old_init, **kwargs):
+                __old_init(self, *args, **kwargs)
+                try:
+                    QTimer.singleShot(800, lambda: _AALYAN_LIQUID_phase2_polish_scan(self))
+                    QTimer.singleShot(1800, lambda: _AALYAN_LIQUID_phase2_polish_scan(self))
+                except Exception as e:
+                    print("[AALYAN LIQUID PHASE2] delayed apply failed:", e)
+
+            obj.__init__ = new_init
+            obj._aalyan_liquid_phase2_wrapped = True
+            patched += 1
+
+        except Exception:
+            pass
+
+    print(f"[AALYAN LIQUID UI] Phase 2 windows patched: {patched}")
+
+
+_AALYAN_LIQUID_phase2_patch_windows()
+
+# ============================================================
+# END AALYAN LIQUID UI PHASE 2
+# ============================================================
+
+
+
+
+# ============================================================
+# AALYAN LIQUID UI PHASE 3
+# Theme engine: Apple-like Dark/Light switching.
+# Removes strong blue/cyan feeling and uses graphite/emerald/amber.
+# UI-only patch. Backend/API/DICOM/FHIR/PDF untouched.
+# ============================================================
+
+def _AALYAN_THEME_config_path():
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[2]
+    cfg = root / "config"
+    cfg.mkdir(parents=True, exist_ok=True)
+    return cfg / "gui_theme.json"
+
+
+def _AALYAN_THEME_load():
+    import json
+    try:
+        path = _AALYAN_THEME_config_path()
+        if path.exists():
+            data = json.loads(path.read_text(encoding="utf-8"))
+            theme = str(data.get("theme", "dark")).strip().lower()
+            if theme in {"dark", "light"}:
+                return theme
+    except Exception:
+        pass
+    return "dark"
+
+
+def _AALYAN_THEME_save(theme):
+    import json
+    try:
+        path = _AALYAN_THEME_config_path()
+        path.write_text(json.dumps({"theme": theme}, indent=2), encoding="utf-8")
+    except Exception as e:
+        print("[AALYAN THEME] save warning:", e)
+
+
+def _AALYAN_THEME_qss(theme="dark"):
+    """
+    Full app stylesheet.
+    Dark theme: graphite + emerald + amber.
+    Light theme: pearl + forest + amber.
+    """
+    if str(theme).lower() == "light":
+        return """
+        /* AALYAN_THEME_LIGHT */
+        QWidget {
+            background: #F6F7F2;
+            color: #142018;
+            font-family: "Inter", "SF Pro Display", "Segoe UI", "Arial";
+            font-size: 12px;
+        }
+
+        QMainWindow {
+            background: #F6F7F2;
+        }
+
+        QLabel {
+            color: #142018;
+            font-weight: 650;
+            background: transparent;
+        }
+
+        QTabWidget::pane {
+            border: none;
+            border-top: 1px solid rgba(46, 125, 88, 120);
+            background: #F6F7F2;
+            margin-top: 8px;
+        }
+
+        QTabBar {
+            background: transparent;
+        }
+
+        QTabBar::tab {
+            background: rgba(255, 255, 255, 220);
+            color: #234235;
+            border: 1px solid rgba(38, 91, 67, 110);
+            border-radius: 14px;
+            padding: 7px 16px;
+            margin: 3px 4px;
+            font-weight: 850;
+            min-width: 70px;
+        }
+
+        QTabBar::tab:selected {
+            background: qlineargradient(
+                x1:0, y1:0, x2:1, y2:1,
+                stop:0 #D7A84D,
+                stop:0.45 #B88931,
+                stop:1 #2E7D58
+            );
+            color: #FFFFFF;
+            border: 1px solid rgba(255, 255, 255, 230);
+            padding: 8px 19px;
+        }
+
+        QTabBar::tab:hover:!selected {
+            background: rgba(226, 240, 229, 255);
+            color: #173B2A;
+            border: 1px solid rgba(46, 125, 88, 210);
+        }
+
+        QFrame, QGroupBox {
+            background: rgba(255, 255, 255, 235);
+            border: 1px solid rgba(38, 91, 67, 70);
+            border-radius: 18px;
+        }
+
+        QComboBox, QLineEdit {
+            background: rgba(255, 255, 255, 245);
+            color: #142018;
+            border: 1px solid rgba(38, 91, 67, 105);
+            border-radius: 12px;
+            min-height: 30px;
+            padding: 5px 10px;
+            selection-background-color: #2E7D58;
+            selection-color: #FFFFFF;
+        }
+
+        QComboBox:hover, QLineEdit:hover {
+            border: 1px solid rgba(184, 137, 49, 210);
+            background: #FFFFFF;
+        }
+
+        QComboBox:focus, QLineEdit:focus {
+            border: 1px solid rgba(46, 125, 88, 230);
+        }
+
+        QComboBox::drop-down {
+            border: 0px;
+            width: 28px;
+        }
+
+        QPushButton {
+            background: rgba(255, 255, 255, 230);
+            color: #173B2A;
+            border: 1px solid rgba(38, 91, 67, 120);
+            border-radius: 14px;
+            padding: 8px 14px;
+            min-height: 30px;
+            font-weight: 900;
+        }
+
+        QPushButton:hover {
+            background: qlineargradient(
+                x1:0, y1:0, x2:1, y2:1,
+                stop:0 #F2D58A,
+                stop:1 #69B883
+            );
+            color: #11170F;
+            border: 1px solid rgba(255, 255, 255, 255);
+        }
+
+        QPushButton:pressed {
+            background: #B88931;
+            color: #FFFFFF;
+            padding-top: 10px;
+            padding-bottom: 6px;
+        }
+
+        QTextEdit, QPlainTextEdit {
+            background: rgba(255, 255, 255, 240);
+            color: #142018;
+            border: 1px solid rgba(38, 91, 67, 80);
+            border-radius: 18px;
+            padding: 12px;
+            selection-background-color: #2E7D58;
+            selection-color: #FFFFFF;
+        }
+
+        QCheckBox {
+            color: #142018;
+            background: transparent;
+            font-weight: 750;
+            spacing: 8px;
+        }
+
+        QTableWidget, QTableView {
+            background: rgba(255, 255, 255, 240);
+            color: #142018;
+            gridline-color: rgba(38, 91, 67, 70);
+            border: 1px solid rgba(38, 91, 67, 70);
+            border-radius: 12px;
+            selection-background-color: #2E7D58;
+            selection-color: #FFFFFF;
+        }
+
+        QHeaderView::section {
+            background: #E8EEE8;
+            color: #234235;
+            border: 1px solid rgba(38, 91, 67, 70);
+            font-weight: 900;
+            padding: 6px;
+        }
+
+        QScrollArea {
+            border: 0px;
+            background: transparent;
+        }
+
+        QScrollBar:vertical {
+            background: rgba(230, 235, 230, 180);
+            width: 10px;
+            border-radius: 5px;
+        }
+
+        QScrollBar::handle:vertical {
+            background: rgba(46, 125, 88, 170);
+            border-radius: 5px;
+            min-height: 40px;
+        }
+
+        QScrollBar::handle:vertical:hover {
+            background: rgba(184, 137, 49, 210);
+        }
+
+        QScrollBar::add-line:vertical,
+        QScrollBar::sub-line:vertical {
+            height: 0px;
+        }
+
+        QStatusBar {
+            background: #FFFFFF;
+            color: #142018;
+            border-top: 1px solid rgba(38, 91, 67, 90);
+        }
+        """
+
+    return """
+    /* AALYAN_THEME_DARK */
+    QWidget {
+        background: #090D0B;
+        color: #EEF8F0;
+        font-family: "Inter", "SF Pro Display", "Segoe UI", "Arial";
+        font-size: 12px;
+    }
+
+    QMainWindow {
+        background: #090D0B;
+    }
+
+    QLabel {
+        color: #EAF7EF;
+        font-weight: 650;
+        background: transparent;
+    }
+
+    QTabWidget::pane {
+        border: none;
+        border-top: 1px solid rgba(198, 152, 62, 150);
+        background: #090D0B;
+        margin-top: 8px;
+    }
+
+    QTabBar {
+        background: transparent;
+    }
+
+    QTabBar::tab {
+        background: rgba(20, 27, 23, 210);
+        color: #D7E9DC;
+        border: 1px solid rgba(198, 152, 62, 135);
+        border-radius: 14px;
+        padding: 7px 16px;
+        margin: 3px 4px;
+        font-weight: 850;
+        min-width: 70px;
+    }
+
+    QTabBar::tab:selected {
+        background: qlineargradient(
+            x1:0, y1:0, x2:1, y2:1,
+            stop:0 #D7A84D,
+            stop:0.45 #B88931,
+            stop:1 #2E7D58
+        );
+        color: #07100B;
+        border: 1px solid rgba(255, 238, 185, 255);
+        padding: 8px 19px;
+    }
+
+    QTabBar::tab:hover:!selected {
+        background: rgba(46, 125, 88, 80);
+        color: #FFFFFF;
+        border: 1px solid rgba(215, 168, 77, 230);
+    }
+
+    QFrame, QGroupBox {
+        background: rgba(17, 25, 21, 220);
+        border: 1px solid rgba(215, 168, 77, 70);
+        border-radius: 18px;
+    }
+
+    QComboBox, QLineEdit {
+        background: rgba(14, 20, 18, 245);
+        color: #F4FFF6;
+        border: 1px solid rgba(215, 168, 77, 105);
+        border-radius: 12px;
+        min-height: 30px;
+        padding: 5px 10px;
+        selection-background-color: #D7A84D;
+        selection-color: #07100B;
+    }
+
+    QComboBox:hover, QLineEdit:hover {
+        border: 1px solid rgba(46, 125, 88, 230);
+        background: rgba(20, 31, 26, 245);
+    }
+
+    QComboBox:focus, QLineEdit:focus {
+        border: 1px solid rgba(215, 168, 77, 230);
+    }
+
+    QComboBox::drop-down {
+        border: 0px;
+        width: 28px;
+    }
+
+    QPushButton {
+        background: rgba(18, 26, 22, 230);
+        color: #F4FFF6;
+        border: 1px solid rgba(215, 168, 77, 135);
+        border-radius: 14px;
+        padding: 8px 14px;
+        min-height: 30px;
+        font-weight: 900;
+    }
+
+    QPushButton:hover {
+        background: qlineargradient(
+            x1:0, y1:0, x2:1, y2:1,
+            stop:0 #D7A84D,
+            stop:1 #2E7D58
+        );
+        color: #07100B;
+        border: 1px solid rgba(255, 238, 185, 255);
+    }
+
+    QPushButton:pressed {
+        background: #B88931;
+        color: #07100B;
+        padding-top: 10px;
+        padding-bottom: 6px;
+    }
+
+    QTextEdit, QPlainTextEdit {
+        background: rgba(17, 25, 21, 240);
+        color: #ECFAEF;
+        border: 1px solid rgba(215, 168, 77, 75);
+        border-radius: 18px;
+        padding: 12px;
+        selection-background-color: #D7A84D;
+        selection-color: #07100B;
+    }
+
+    QCheckBox {
+        color: #ECFAEF;
+        background: transparent;
+        font-weight: 750;
+        spacing: 8px;
+    }
+
+    QTableWidget, QTableView {
+        background: rgba(17, 25, 21, 240);
+        color: #ECFAEF;
+        gridline-color: rgba(215, 168, 77, 70);
+        border: 1px solid rgba(215, 168, 77, 70);
+        border-radius: 12px;
+        selection-background-color: #D7A84D;
+        selection-color: #07100B;
+    }
+
+    QHeaderView::section {
+        background: #111914;
+        color: #D7A84D;
+        border: 1px solid rgba(215, 168, 77, 70);
+        font-weight: 900;
+        padding: 6px;
+    }
+
+    QScrollArea {
+        border: 0px;
+        background: transparent;
+    }
+
+    QScrollBar:vertical {
+        background: rgba(8, 12, 10, 160);
+        width: 10px;
+        border-radius: 5px;
+    }
+
+    QScrollBar::handle:vertical {
+        background: rgba(215, 168, 77, 160);
+        border-radius: 5px;
+        min-height: 40px;
+    }
+
+    QScrollBar::handle:vertical:hover {
+        background: rgba(46, 125, 88, 230);
+    }
+
+    QScrollBar::add-line:vertical,
+    QScrollBar::sub-line:vertical {
+        height: 0px;
+    }
+
+    QStatusBar {
+        background: #111914;
+        color: #ECFAEF;
+        border-top: 1px solid rgba(215, 168, 77, 80);
+    }
+    """
+
+
+def _AALYAN_THEME_button_qss(theme):
+    if theme == "light":
+        return """
+        QPushButton {
+            background: #FFFFFF;
+            color: #173B2A;
+            border: 1px solid rgba(46,125,88,150);
+            border-radius: 14px;
+            padding: 5px 12px;
+            font-weight: 900;
+        }
+        QPushButton:hover {
+            background: #E8EEE8;
+            border: 1px solid rgba(184,137,49,220);
+        }
+        """
+    return """
+    QPushButton {
+        background: rgba(22, 31, 26, 240);
+        color: #F2D58A;
+        border: 1px solid rgba(215,168,77,150);
+        border-radius: 14px;
+        padding: 5px 12px;
+        font-weight: 900;
+    }
+    QPushButton:hover {
+        background: rgba(46,125,88,170);
+        color: #FFFFFF;
+        border: 1px solid rgba(242,213,138,240);
+    }
+    """
+
+
+def _AALYAN_THEME_apply(gui_self, theme=None):
+    try:
+        from PyQt5.QtWidgets import QApplication
+    except Exception as e:
+        print("[AALYAN THEME] Qt import failed:", e)
+        return
+
+    try:
+        if theme is None:
+            theme = _AALYAN_THEME_load()
+
+        theme = str(theme).lower().strip()
+        if theme not in {"dark", "light"}:
+            theme = "dark"
+
+        app = QApplication.instance()
+        if app is not None:
+            app.setStyleSheet(_AALYAN_THEME_qss(theme))
+
+        gui_self._aalyan_current_theme = theme
+        _AALYAN_THEME_save(theme)
+
+        # Update window background too
+        try:
+            if theme == "light":
+                gui_self.setStyleSheet((gui_self.styleSheet() or "") + "\nQMainWindow{background:#F6F7F2;}")
+            else:
+                gui_self.setStyleSheet((gui_self.styleSheet() or "") + "\nQMainWindow{background:#090D0B;}")
+        except Exception:
+            pass
+
+        # Update theme button
+        try:
+            btn = getattr(gui_self, "btn_aalyan_theme_toggle", None)
+            if btn:
+                btn.setText("☀ Light" if theme == "light" else "☾ Dark")
+                btn.setStyleSheet(_AALYAN_THEME_button_qss(theme))
+        except Exception:
+            pass
+
+        # Re-apply liquid tab style if Phase 1 exists, but theme QSS is now source of truth.
+        print(f"[AALYAN THEME] Applied {theme} theme.")
+
+    except Exception as e:
+        print("[AALYAN THEME] apply failed:", e)
+
+
+def _AALYAN_THEME_toggle(gui_self):
+    current = getattr(gui_self, "_aalyan_current_theme", _AALYAN_THEME_load())
+    new_theme = "light" if current == "dark" else "dark"
+    _AALYAN_THEME_apply(gui_self, new_theme)
+
+
+def _AALYAN_THEME_install(gui_self):
+    try:
+        from PyQt5.QtWidgets import QPushButton, QShortcut
+        from PyQt5.QtGui import QKeySequence
+        from PyQt5.QtCore import QTimer
+    except Exception as e:
+        print("[AALYAN THEME] install import failed:", e)
+        return
+
+    try:
+        if getattr(gui_self, "_aalyan_theme_installed", False):
+            return
+        gui_self._aalyan_theme_installed = True
+
+        # Apply saved theme after older Phase 1/2 patches finish.
+        QTimer.singleShot(2200, lambda: _AALYAN_THEME_apply(gui_self, _AALYAN_THEME_load()))
+        QTimer.singleShot(3200, lambda: _AALYAN_THEME_apply(gui_self, _AALYAN_THEME_load()))
+
+        # Add bottom status-bar theme toggle.
+        btn = QPushButton("☾ Dark")
+        btn.setToolTip("Switch MEDAI theme (Ctrl+T)")
+        btn.clicked.connect(lambda: _AALYAN_THEME_toggle(gui_self))
+        gui_self.btn_aalyan_theme_toggle = btn
+
+        try:
+            gui_self.statusBar().addPermanentWidget(btn)
+        except Exception:
+            pass
+
+        # Ctrl+T shortcut.
+        try:
+            shortcut = QShortcut(QKeySequence("Ctrl+T"), gui_self)
+            shortcut.activated.connect(lambda: _AALYAN_THEME_toggle(gui_self))
+            gui_self.shortcut_aalyan_theme_toggle = shortcut
+        except Exception as e:
+            print("[AALYAN THEME] shortcut warning:", e)
+
+        print("[AALYAN THEME] Theme toggle installed. Use Ctrl+T or bottom button.")
+
+    except Exception as e:
+        print("[AALYAN THEME] install failed:", e)
+
+
+def _AALYAN_THEME_patch_windows():
+    try:
+        from PyQt5.QtWidgets import QMainWindow
+        from PyQt5.QtCore import QTimer
+    except Exception as e:
+        print("[AALYAN THEME] patch import failed:", e)
+        return
+
+    patched = 0
+
+    for name, obj in list(globals().items()):
+        try:
+            if not isinstance(obj, type):
+                continue
+            if not issubclass(obj, QMainWindow):
+                continue
+            if getattr(obj, "_aalyan_theme_init_wrapped", False):
+                continue
+
+            old_init = obj.__init__
+
+            def new_init(self, *args, __old_init=old_init, **kwargs):
+                __old_init(self, *args, **kwargs)
+                try:
+                    QTimer.singleShot(900, lambda: _AALYAN_THEME_install(self))
+                except Exception as e:
+                    print("[AALYAN THEME] delayed install failed:", e)
+
+            obj.__init__ = new_init
+            obj._aalyan_theme_init_wrapped = True
+            patched += 1
+
+        except Exception:
+            pass
+
+    print(f"[AALYAN THEME] Main windows patched: {patched}")
+
+
+_AALYAN_THEME_patch_windows()
+
+# ============================================================
+# END AALYAN LIQUID UI PHASE 3
+# ============================================================
+
+
+
+
+# ============================================================
+# AALYAN LIQUID UI PHASE 4 SAFE
+# Style-only premium redesign.
+# DOES NOT insert widgets.
+# DOES NOT modify layout.
+# DOES NOT touch backend/API/DICOM/FHIR/PDF.
+# ============================================================
+
+def _AALYAN_LIQUID4_SAFE_scan_root(gui_self):
+    try:
+        from PyQt5.QtWidgets import QScrollArea
+        tabs = getattr(gui_self, "tabs", None)
+        if not tabs:
+            return None
+
+        for i in range(tabs.count()):
+            if str(tabs.tabText(i)).strip().lower() == "scan":
+                w = tabs.widget(i)
+                if isinstance(w, QScrollArea) and w.widget():
+                    return w.widget()
+                return w
+    except Exception:
+        pass
+    return None
+
+
+def _AALYAN_LIQUID4_SAFE_apply_tabs(gui_self):
+    try:
+        tabs = getattr(gui_self, "tabs", None)
+        if not tabs:
+            return
+
+        tabs.setDocumentMode(True)
+
+        tabs.setStyleSheet("""
+        QTabWidget::pane {
+            border: none;
+            border-top: 1px solid rgba(215, 168, 77, 150);
+            background: #090D0B;
+            margin-top: 8px;
+        }
+
+        QTabBar {
+            background: transparent;
+        }
+
+        QTabBar::tab {
+            background: rgba(16, 23, 19, 230);
+            color: #EAF7EF;
+            border: 1px solid rgba(215, 168, 77, 135);
+            border-radius: 15px;
+            padding: 7px 16px;
+            margin: 3px 4px;
+            font-weight: 900;
+            min-width: 70px;
+        }
+
+        QTabBar::tab:selected {
+            background: qlineargradient(
+                x1:0, y1:0, x2:1, y2:1,
+                stop:0 #F2D58A,
+                stop:0.46 #D7A84D,
+                stop:1 #2E7D58
+            );
+            color: #06100B;
+            border: 1px solid rgba(255, 238, 185, 255);
+            padding: 8px 19px;
+        }
+
+        QTabBar::tab:hover:!selected {
+            background: rgba(46, 125, 88, 120);
+            color: #FFFFFF;
+            border: 1px solid rgba(242, 213, 138, 240);
+        }
+        """)
+    except Exception as e:
+        print("[AALYAN PHASE4 SAFE] tab style failed:", e)
+
+
+def _AALYAN_LIQUID4_SAFE_style_buttons(root):
+    try:
+        from PyQt5.QtWidgets import QPushButton
+
+        for btn in root.findChildren(QPushButton):
+            t = btn.text().strip().lower()
+
+            # Main analyze action
+            if "run pipeline" in t:
+                btn.setMinimumHeight(46)
+                btn.setStyleSheet("""
+                QPushButton {
+                    background: qlineargradient(
+                        x1:0, y1:0, x2:1, y2:1,
+                        stop:0 #F2D58A,
+                        stop:0.48 #D7A84D,
+                        stop:1 #2E7D58
+                    );
+                    color: #06100B;
+                    border: 1px solid rgba(255, 238, 185, 245);
+                    border-radius: 18px;
+                    padding: 11px 16px;
+                    font-weight: 950;
+                    font-size: 14px;
+                }
+                QPushButton:hover {
+                    background: qlineargradient(
+                        x1:0, y1:0, x2:1, y2:1,
+                        stop:0 #FFE8A6,
+                        stop:1 #55C083
+                    );
+                }
+                QPushButton:pressed {
+                    background: #B88931;
+                    padding-top: 13px;
+                    padding-bottom: 9px;
+                }
+                """)
+
+            # Upload / DICOM
+            elif "upload" in t or "drop dicom" in t:
+                btn.setMinimumHeight(42)
+                btn.setStyleSheet("""
+                QPushButton {
+                    background: rgba(22, 31, 26, 235);
+                    color: #F2D58A;
+                    border: 1px dashed rgba(215, 168, 77, 210);
+                    border-radius: 17px;
+                    padding: 10px 14px;
+                    font-weight: 900;
+                }
+                QPushButton:hover {
+                    background: rgba(46, 125, 88, 130);
+                    color: #FFFFFF;
+                    border: 1px solid rgba(242, 213, 138, 245);
+                }
+                """)
+
+            # PDF generation
+            elif "generate pdf" in t:
+                btn.setMinimumHeight(42)
+                btn.setStyleSheet("""
+                QPushButton {
+                    background: qlineargradient(
+                        x1:0, y1:0, x2:1, y2:1,
+                        stop:0 #D7A84D,
+                        stop:1 #B88931
+                    );
+                    color: #06100B;
+                    border: 1px solid rgba(255, 238, 185, 210);
+                    border-radius: 17px;
+                    padding: 10px 14px;
+                    font-weight: 950;
+                }
+                QPushButton:hover {
+                    background: #F2D58A;
+                    color: #06100B;
+                }
+                """)
+
+            # EMR / FHIR
+            elif "push to emr" in t or "fhir" in t:
+                btn.setMinimumHeight(42)
+                btn.setStyleSheet("""
+                QPushButton {
+                    background: qlineargradient(
+                        x1:0, y1:0, x2:1, y2:1,
+                        stop:0 #2E7D58,
+                        stop:1 #68B684
+                    );
+                    color: #F7FFF9;
+                    border: 1px solid rgba(175, 255, 200, 180);
+                    border-radius: 17px;
+                    padding: 10px 14px;
+                    font-weight: 950;
+                }
+                QPushButton:hover {
+                    background: #3FA96F;
+                    color: #FFFFFF;
+                }
+                """)
+
+            # New scan / session
+            elif "diagnose new image" in t:
+                btn.setMinimumHeight(38)
+                btn.setStyleSheet("""
+                QPushButton {
+                    background: rgba(46, 125, 88, 80);
+                    color: #EAF7EF;
+                    border: 1px solid rgba(46, 125, 88, 210);
+                    border-radius: 15px;
+                    padding: 8px 12px;
+                    font-weight: 900;
+                }
+                QPushButton:hover {
+                    background: rgba(46, 125, 88, 180);
+                    color: #FFFFFF;
+                }
+                """)
+
+            elif "end" in t or "close session" in t:
+                btn.setMinimumHeight(38)
+                btn.setStyleSheet("""
+                QPushButton {
+                    background: rgba(34, 24, 20, 220);
+                    color: #F2D58A;
+                    border: 1px solid rgba(215, 168, 77, 135);
+                    border-radius: 15px;
+                    padding: 8px 12px;
+                    font-weight: 900;
+                }
+                QPushButton:hover {
+                    background: rgba(215, 168, 77, 180);
+                    color: #06100B;
+                }
+                """)
+
+            # Patient new/edit
+            elif t in {"+ new", "edit"} or t == "new":
+                btn.setMinimumHeight(34)
+                btn.setStyleSheet("""
+                QPushButton {
+                    background: rgba(18, 26, 22, 235);
+                    color: #F2D58A;
+                    border: 1px solid rgba(215, 168, 77, 150);
+                    border-radius: 15px;
+                    padding: 7px 12px;
+                    font-weight: 900;
+                }
+                QPushButton:hover {
+                    background: rgba(46, 125, 88, 170);
+                    color: #FFFFFF;
+                }
+                """)
+
+            # General fallback for scan buttons only
+            else:
+                btn.setStyleSheet("""
+                QPushButton {
+                    background: rgba(18, 26, 22, 230);
+                    color: #EAF7EF;
+                    border: 1px solid rgba(215, 168, 77, 110);
+                    border-radius: 14px;
+                    padding: 8px 12px;
+                    font-weight: 850;
+                }
+                QPushButton:hover {
+                    background: rgba(46, 125, 88, 135);
+                    color: #FFFFFF;
+                    border: 1px solid rgba(242, 213, 138, 220);
+                }
+                """)
+    except Exception as e:
+        print("[AALYAN PHASE4 SAFE] button style failed:", e)
+
+
+def _AALYAN_LIQUID4_SAFE_style_fields(root):
+    try:
+        from PyQt5.QtWidgets import QComboBox, QLineEdit, QTextEdit, QPlainTextEdit
+
+        combo_line_style = """
+        QComboBox, QLineEdit {
+            background: rgba(12, 18, 15, 245);
+            color: #F7FFF9;
+            border: 1px solid rgba(215, 168, 77, 120);
+            border-radius: 14px;
+            min-height: 32px;
+            padding: 6px 10px;
+            font-weight: 750;
+            selection-background-color: #D7A84D;
+            selection-color: #06100B;
+        }
+        QComboBox:hover, QLineEdit:hover {
+            border: 1px solid rgba(46, 125, 88, 230);
+            background: rgba(18, 27, 22, 245);
+        }
+        QComboBox:focus, QLineEdit:focus {
+            border: 1px solid rgba(242, 213, 138, 245);
+        }
+        QComboBox::drop-down {
+            border: 0px;
+            width: 28px;
+        }
+        """
+
+        for w in root.findChildren((QComboBox, QLineEdit)):
+            w.setStyleSheet(combo_line_style)
+
+        text_style = """
+        QTextEdit, QPlainTextEdit {
+            background: rgba(12, 18, 15, 235);
+            color: #EAF7EF;
+            border: 1px solid rgba(215, 168, 77, 85);
+            border-radius: 20px;
+            padding: 14px;
+            font-size: 13px;
+            selection-background-color: #D7A84D;
+            selection-color: #06100B;
+        }
+        """
+
+        for w in root.findChildren((QTextEdit, QPlainTextEdit)):
+            w.setStyleSheet(text_style)
+
+    except Exception as e:
+        print("[AALYAN PHASE4 SAFE] field style failed:", e)
+
+
+def _AALYAN_LIQUID4_SAFE_style_labels(root):
+    try:
+        from PyQt5.QtWidgets import QLabel
+
+        for lbl in root.findChildren(QLabel):
+            txt = lbl.text().strip().lower()
+
+            if txt in {"patient:", "modality:"} or txt.startswith("active:"):
+                lbl.setStyleSheet("""
+                QLabel {
+                    color:#F2D58A;
+                    font-weight:950;
+                    background:transparent;
+                    border:none;
+                }
+                """)
+
+            elif any(k in txt for k in ["predicted class", "mc uncertainty", "routing tier", "ood status"]):
+                lbl.setStyleSheet("""
+                QLabel {
+                    color:#F2D58A;
+                    font-weight:950;
+                    font-size:12px;
+                    background:rgba(9,13,11,160);
+                    border:1px solid rgba(215,168,77,75);
+                    border-radius:10px;
+                    padding:4px 8px;
+                }
+                """)
+
+            elif "pending" in txt:
+                lbl.setStyleSheet("""
+                QLabel {
+                    color:#F2D58A;
+                    font-weight:950;
+                    font-size:22px;
+                    background:transparent;
+                    border:none;
+                }
+                """)
+
+            elif "drop dicom here" in txt:
+                lbl.setStyleSheet("""
+                QLabel {
+                    background: qradialgradient(
+                        cx:0.5, cy:0.5, radius:0.85,
+                        fx:0.5, fy:0.5,
+                        stop:0 rgba(25,34,29,210),
+                        stop:0.55 rgba(5,8,7,250),
+                        stop:1 rgba(0,0,0,255)
+                    );
+                    color: rgba(242,213,138,170);
+                    border: 1px solid rgba(215,168,77,120);
+                    border-radius: 24px;
+                    font-weight: 850;
+                    letter-spacing: 0.8px;
+                }
+                """)
+
+    except Exception as e:
+        print("[AALYAN PHASE4 SAFE] label style failed:", e)
+
+
+def _AALYAN_LIQUID4_SAFE_style_cards(root):
+    try:
+        from PyQt5.QtWidgets import QLabel, QWidget, QFrame, QGroupBox
+        from PyQt5.QtWidgets import QGraphicsDropShadowEffect
+        from PyQt5.QtGui import QColor
+
+        # General frames/cards only. Do not resize.
+        for w in root.findChildren((QFrame, QGroupBox)):
+            try:
+                w.setStyleSheet("""
+                QFrame, QGroupBox {
+                    background: rgba(17, 25, 21, 230);
+                    border: 1px solid rgba(215,168,77,75);
+                    border-radius: 18px;
+                }
+                """)
+            except Exception:
+                pass
+
+        # Parent cards around result labels
+        keywords = ["predicted class", "mc uncertainty", "routing tier", "ood status"]
+
+        for lbl in root.findChildren(QLabel):
+            txt = lbl.text().strip().lower()
+            if not any(k in txt for k in keywords):
+                continue
+
+            card = lbl.parent()
+            if not card:
+                continue
+
+            card.setStyleSheet("""
+            QWidget {
+                background: rgba(17, 25, 21, 235);
+                border: 1px solid rgba(215,168,77,75);
+                border-left: 4px solid #D7A84D;
+                border-radius: 18px;
+            }
+            """)
+
+            if not getattr(card, "_aalyan_phase4_safe_shadow", False):
+                shadow = QGraphicsDropShadowEffect(card)
+                shadow.setBlurRadius(18)
+                shadow.setOffset(0, 5)
+                shadow.setColor(QColor(0, 0, 0, 95))
+                card.setGraphicsEffect(shadow)
+                card._aalyan_phase4_safe_shadow = True
+
+    except Exception as e:
+        print("[AALYAN PHASE4 SAFE] card style failed:", e)
+
+
+def _AALYAN_LIQUID4_SAFE_apply(gui_self):
+    try:
+        from PyQt5.QtWidgets import QScrollArea
+
+        root = _AALYAN_LIQUID4_SAFE_scan_root(gui_self)
+        if root is None:
+            print("[AALYAN PHASE4 SAFE] Scan root not found.")
+            return
+
+        # Do not block reapply because theme switching / old patches can override styles.
+        root.setStyleSheet("""
+        QWidget {
+            background: #090D0B;
+            color: #EAF7EF;
+            font-family: "Inter", "SF Pro Display", "Segoe UI", "Arial";
+        }
+
+        QScrollArea {
+            border: 0px;
+            background: transparent;
+        }
+
+        QScrollBar:vertical {
+            background: rgba(8, 12, 10, 160);
+            width: 10px;
+            border-radius: 5px;
+        }
+
+        QScrollBar::handle:vertical {
+            background: rgba(215, 168, 77, 160);
+            border-radius: 5px;
+            min-height: 40px;
+        }
+
+        QScrollBar::handle:vertical:hover {
+            background: rgba(46, 125, 88, 230);
+        }
+
+        QScrollBar::add-line:vertical,
+        QScrollBar::sub-line:vertical {
+            height: 0px;
+        }
+        """)
+
+        _AALYAN_LIQUID4_SAFE_apply_tabs(gui_self)
+        _AALYAN_LIQUID4_SAFE_style_buttons(root)
+        _AALYAN_LIQUID4_SAFE_style_fields(root)
+        _AALYAN_LIQUID4_SAFE_style_labels(root)
+        _AALYAN_LIQUID4_SAFE_style_cards(root)
+
+        print("[AALYAN LIQUID UI] Phase 4 SAFE applied: style-only premium theme.")
+
+    except Exception as e:
+        print("[AALYAN PHASE4 SAFE] apply failed:", e)
+
+
+def _AALYAN_LIQUID4_SAFE_patch_windows():
+    try:
+        from PyQt5.QtWidgets import QMainWindow
+        from PyQt5.QtCore import QTimer
+    except Exception as e:
+        print("[AALYAN PHASE4 SAFE] patch import failed:", e)
+        return
+
+    patched = 0
+
+    for name, obj in list(globals().items()):
+        try:
+            if not isinstance(obj, type):
+                continue
+            if not issubclass(obj, QMainWindow):
+                continue
+            if getattr(obj, "_aalyan_phase4_safe_wrapped", False):
+                continue
+
+            old_init = obj.__init__
+
+            def new_init(self, *args, __old_init=old_init, **kwargs):
+                __old_init(self, *args, **kwargs)
+                try:
+                    QTimer.singleShot(3600, lambda: _AALYAN_LIQUID4_SAFE_apply(self))
+                    QTimer.singleShot(5200, lambda: _AALYAN_LIQUID4_SAFE_apply(self))
+
+                    # Re-apply when switching to Scan tab without disconnecting existing animations.
+                    try:
+                        if hasattr(self, "tabs"):
+                            self.tabs.currentChanged.connect(lambda idx: QTimer.singleShot(180, lambda: _AALYAN_LIQUID4_SAFE_apply(self)))
+                    except Exception:
+                        pass
+
+                except Exception as e:
+                    print("[AALYAN PHASE4 SAFE] delayed apply failed:", e)
+
+            obj.__init__ = new_init
+            obj._aalyan_phase4_safe_wrapped = True
+            patched += 1
+
+        except Exception:
+            pass
+
+    print(f"[AALYAN LIQUID UI] Phase 4 SAFE windows patched: {patched}")
+
+
+_AALYAN_LIQUID4_SAFE_patch_windows()
+
+# ============================================================
+# END AALYAN LIQUID UI PHASE 4 SAFE
+# ============================================================
+
+
+
+
+# ============================================================
+# AALYAN LIQUID UI PHASE 4.1
+# Remove unwanted boxes around QLabel text after Phase 4.
+# Keeps premium gold/green theme but cleans label styling.
+# UI-only. Backend/API/DICOM/FHIR/PDF untouched.
+# ============================================================
+
+def _AALYAN_PHASE4_1_scan_root(gui_self):
+    try:
+        from PyQt5.QtWidgets import QScrollArea
+        tabs = getattr(gui_self, "tabs", None)
+        if not tabs:
+            return None
+
+        for i in range(tabs.count()):
+            if str(tabs.tabText(i)).strip().lower() == "scan":
+                w = tabs.widget(i)
+                if isinstance(w, QScrollArea) and w.widget():
+                    return w.widget()
+                return w
+    except Exception:
+        pass
+    return None
+
+
+# Override Phase 4 SAFE label styling with cleaner version
+def _AALYAN_LIQUID4_SAFE_style_labels(root):
+    try:
+        from PyQt5.QtWidgets import QLabel
+
+        for lbl in root.findChildren(QLabel):
+            try:
+                txt = lbl.text().strip().lower()
+
+                # Remove frame effect if any
+                try:
+                    lbl.setFrameStyle(0)
+                except Exception:
+                    pass
+
+                # Default: no border/background
+                base = """
+                QLabel {
+                    background: transparent;
+                    border: none;
+                    color: #EAF7EF;
+                    font-weight: 700;
+                }
+                """
+
+                if txt in {"patient:", "modality:"} or txt.startswith("active:"):
+                    lbl.setStyleSheet("""
+                    QLabel {
+                        background: transparent;
+                        border: none;
+                        color: #F2D58A;
+                        font-weight: 950;
+                        padding: 0px;
+                    }
+                    """)
+
+                elif any(k in txt for k in ["predicted class", "mc uncertainty", "routing tier", "ood status"]):
+                    lbl.setStyleSheet("""
+                    QLabel {
+                        background: transparent;
+                        border: none;
+                        color: #F2D58A;
+                        font-weight: 950;
+                        font-size: 12px;
+                        padding: 0px;
+                    }
+                    """)
+
+                elif "pending" in txt:
+                    lbl.setStyleSheet("""
+                    QLabel {
+                        background: transparent;
+                        border: none;
+                        color: #F2D58A;
+                        font-weight: 950;
+                        font-size: 22px;
+                        padding: 0px;
+                    }
+                    """)
+
+                elif "drop dicom here" in txt:
+                    lbl.setStyleSheet("""
+                    QLabel {
+                        background: transparent;
+                        border: none;
+                        color: rgba(242,213,138,170);
+                        font-weight: 850;
+                        letter-spacing: 0.8px;
+                        padding: 0px;
+                    }
+                    """)
+
+                else:
+                    lbl.setStyleSheet(base)
+
+            except Exception:
+                pass
+
+    except Exception as e:
+        print("[AALYAN PHASE4.1] label cleanup failed:", e)
+
+
+# Override Phase 4 SAFE card styling to avoid QWidget stylesheet cascade
+def _AALYAN_LIQUID4_SAFE_style_cards(root):
+    try:
+        from PyQt5.QtWidgets import QLabel, QFrame, QGroupBox, QGraphicsDropShadowEffect
+        from PyQt5.QtGui import QColor
+
+        # Only style actual frames/groupboxes. Do not style generic QWidget.
+        for w in root.findChildren((QFrame, QGroupBox)):
+            try:
+                w.setStyleSheet("""
+                QFrame, QGroupBox {
+                    background: rgba(17, 25, 21, 230);
+                    border: 1px solid rgba(215,168,77,75);
+                    border-radius: 18px;
+                }
+
+                QLabel {
+                    background: transparent;
+                    border: none;
+                }
+                """)
+            except Exception:
+                pass
+
+        # Style result-card parents carefully, then immediately clean children labels
+        keywords = ["predicted class", "mc uncertainty", "routing tier", "ood status"]
+
+        for lbl in root.findChildren(QLabel):
+            txt = lbl.text().strip().lower()
+            if not any(k in txt for k in keywords):
+                continue
+
+            card = lbl.parent()
+            if not card:
+                continue
+
+            # Avoid QWidget selector cascade. Apply plain background via objectName.
+            try:
+                if not card.objectName():
+                    card.setObjectName("AALYANResultCard")
+                card.setStyleSheet("""
+                QWidget#AALYANResultCard {
+                    background: rgba(17, 25, 21, 235);
+                    border: 1px solid rgba(215,168,77,75);
+                    border-left: 4px solid #D7A84D;
+                    border-radius: 18px;
+                }
+
+                QWidget#AALYANResultCard QLabel {
+                    background: transparent;
+                    border: none;
+                }
+                """)
+            except Exception:
+                pass
+
+            if not getattr(card, "_aalyan_phase4_1_shadow", False):
+                try:
+                    shadow = QGraphicsDropShadowEffect(card)
+                    shadow.setBlurRadius(18)
+                    shadow.setOffset(0, 5)
+                    shadow.setColor(QColor(0, 0, 0, 95))
+                    card.setGraphicsEffect(shadow)
+                    card._aalyan_phase4_1_shadow = True
+                except Exception:
+                    pass
+
+    except Exception as e:
+        print("[AALYAN PHASE4.1] card cleanup failed:", e)
+
+
+def _AALYAN_PHASE4_1_cleanup_label_boxes(gui_self):
+    try:
+        root = _AALYAN_PHASE4_1_scan_root(gui_self)
+        if root is None:
+            return
+
+        _AALYAN_LIQUID4_SAFE_style_cards(root)
+        _AALYAN_LIQUID4_SAFE_style_labels(root)
+
+        print("[AALYAN LIQUID UI] Phase 4.1 applied: label boxes removed.")
+
+    except Exception as e:
+        print("[AALYAN PHASE4.1] cleanup failed:", e)
+
+
+def _AALYAN_PHASE4_1_patch_windows():
+    try:
+        from PyQt5.QtWidgets import QMainWindow
+        from PyQt5.QtCore import QTimer
+    except Exception as e:
+        print("[AALYAN PHASE4.1] patch import failed:", e)
+        return
+
+    patched = 0
+
+    for name, obj in list(globals().items()):
+        try:
+            if not isinstance(obj, type):
+                continue
+            if not issubclass(obj, QMainWindow):
+                continue
+            if getattr(obj, "_aalyan_phase4_1_wrapped", False):
+                continue
+
+            old_init = obj.__init__
+
+            def new_init(self, *args, __old_init=old_init, **kwargs):
+                __old_init(self, *args, **kwargs)
+
+                try:
+                    # Run after Phase 4 safe styling
+                    QTimer.singleShot(5800, lambda: _AALYAN_PHASE4_1_cleanup_label_boxes(self))
+                    QTimer.singleShot(7200, lambda: _AALYAN_PHASE4_1_cleanup_label_boxes(self))
+
+                    # Re-clean when returning to Scan tab
+                    try:
+                        if hasattr(self, "tabs"):
+                            self.tabs.currentChanged.connect(
+                                lambda idx: QTimer.singleShot(350, lambda: _AALYAN_PHASE4_1_cleanup_label_boxes(self))
+                            )
+                    except Exception:
+                        pass
+
+                except Exception as e:
+                    print("[AALYAN PHASE4.1] delayed cleanup failed:", e)
+
+            obj.__init__ = new_init
+            obj._aalyan_phase4_1_wrapped = True
+            patched += 1
+
+        except Exception:
+            pass
+
+    print(f"[AALYAN LIQUID UI] Phase 4.1 windows patched: {patched}")
+
+
+_AALYAN_PHASE4_1_patch_windows()
+
+# ============================================================
+# END AALYAN LIQUID UI PHASE 4.1
+# ============================================================
+
+
+
+
+# ============================================================
+# AALYAN LIQUID UI PHASE 5
+# Global navigation polish: remove remaining cyan/blue tab look.
+# Gold/green graphite interface, style-only.
+# ============================================================
+
+def _AALYAN_PHASE5_tabs_qss():
+    return """
+    QTabWidget::pane {
+        border: none;
+        border-top: 1px solid rgba(215, 168, 77, 150);
+        background: #090D0B;
+        margin-top: 8px;
+    }
+
+    QTabBar {
+        background: transparent;
+    }
+
+    QTabBar::tab {
+        background: rgba(14, 20, 17, 235);
+        color: #EAF7EF;
+        border: 1px solid rgba(215, 168, 77, 150);
+        border-radius: 15px;
+        padding: 7px 17px;
+        margin: 3px 4px;
+        font-weight: 900;
+        min-width: 72px;
+    }
+
+    QTabBar::tab:selected {
+        background: qlineargradient(
+            x1:0, y1:0, x2:1, y2:1,
+            stop:0 #F2D58A,
+            stop:0.42 #D7A84D,
+            stop:1 #2E7D58
+        );
+        color: #06100B;
+        border: 1px solid rgba(255, 238, 185, 255);
+        padding: 8px 20px;
+    }
+
+    QTabBar::tab:hover:!selected {
+        background: rgba(46, 125, 88, 135);
+        color: #FFFFFF;
+        border: 1px solid rgba(242, 213, 138, 245);
+    }
+    """
+
+
+def _AALYAN_PHASE5_status_qss():
+    return """
+    QStatusBar {
+        background: #0C100E;
+        color: #EAF7EF;
+        border-top: 1px solid rgba(215, 168, 77, 110);
+        font-weight: 750;
+    }
+
+    QStatusBar QLabel {
+        background: transparent;
+        color: #EAF7EF;
+        border: none;
+        font-weight: 850;
+    }
+
+    QPushButton {
+        background: rgba(18, 26, 22, 235);
+        color: #F2D58A;
+        border: 1px solid rgba(215,168,77,150);
+        border-radius: 14px;
+        padding: 5px 12px;
+        font-weight: 900;
+    }
+
+    QPushButton:hover {
+        background: rgba(46,125,88,170);
+        color: #FFFFFF;
+        border: 1px solid rgba(242,213,138,240);
+    }
+    """
+
+
+def _AALYAN_PHASE5_apply(gui_self):
+    try:
+        from PyQt5.QtWidgets import QLabel, QPushButton, QStatusBar
+
+        # Top tab bar final override
+        try:
+            if hasattr(gui_self, "tabs"):
+                gui_self.tabs.setStyleSheet(_AALYAN_PHASE5_tabs_qss())
+        except Exception:
+            pass
+
+        # Header / status label accent cleanup
+        try:
+            for lbl in gui_self.findChildren(QLabel):
+                txt = lbl.text().strip()
+
+                if txt == "MEDAI":
+                    lbl.setStyleSheet("""
+                    QLabel {
+                        color: #F2D58A;
+                        font-size: 18px;
+                        font-weight: 950;
+                        background: rgba(13,20,16,230);
+                        border: 1px solid rgba(215,168,77,130);
+                        border-radius: 14px;
+                        padding: 6px 10px;
+                    }
+                    """)
+
+                elif "Edge v2.0" in txt:
+                    lbl.setStyleSheet("""
+                    QLabel {
+                        color: #CFE8D5;
+                        font-size: 12px;
+                        font-weight: 850;
+                        background: rgba(13,20,16,180);
+                        border: 1px solid rgba(46,125,88,120);
+                        border-radius: 14px;
+                        padding: 6px 10px;
+                    }
+                    """)
+
+                elif "NVIDIA Jetson" in txt or "Multi-Modal" in txt:
+                    lbl.setStyleSheet("""
+                    QLabel {
+                        color: #9DB9A4;
+                        font-weight: 850;
+                        background: transparent;
+                        border: none;
+                    }
+                    """)
+
+                elif "GPU:" in txt or "Temp:" in txt or "Pwr:" in txt:
+                    lbl.setStyleSheet("""
+                    QLabel {
+                        color: #F2D58A;
+                        font-weight: 950;
+                        background: rgba(13,20,16,210);
+                        border: 1px solid rgba(215,168,77,130);
+                        border-radius: 14px;
+                        padding: 6px 10px;
+                    }
+                    """)
+        except Exception:
+            pass
+
+        # Bottom status bar polish
+        try:
+            sb = gui_self.statusBar()
+            if sb:
+                sb.setStyleSheet(_AALYAN_PHASE5_status_qss())
+        except Exception:
+            pass
+
+        # Keep theme toggle consistent
+        try:
+            btn = getattr(gui_self, "btn_aalyan_theme_toggle", None)
+            if btn:
+                btn.setStyleSheet("""
+                QPushButton {
+                    background: rgba(18, 26, 22, 235);
+                    color: #F2D58A;
+                    border: 1px solid rgba(215,168,77,150);
+                    border-radius: 14px;
+                    padding: 5px 12px;
+                    font-weight: 900;
+                }
+                QPushButton:hover {
+                    background: rgba(46,125,88,170);
+                    color: #FFFFFF;
+                }
+                """)
+        except Exception:
+            pass
+
+        print("[AALYAN LIQUID UI] Phase 5 applied: navigation/status polished.")
+
+    except Exception as e:
+        print("[AALYAN PHASE5] apply failed:", e)
+
+
+def _AALYAN_PHASE5_patch_windows():
+    try:
+        from PyQt5.QtWidgets import QMainWindow
+        from PyQt5.QtCore import QTimer
+    except Exception as e:
+        print("[AALYAN PHASE5] patch import failed:", e)
+        return
+
+    patched = 0
+
+    for name, obj in list(globals().items()):
+        try:
+            if not isinstance(obj, type):
+                continue
+            if not issubclass(obj, QMainWindow):
+                continue
+            if getattr(obj, "_aalyan_phase5_wrapped", False):
+                continue
+
+            old_init = obj.__init__
+
+            def new_init(self, *args, __old_init=old_init, **kwargs):
+                __old_init(self, *args, **kwargs)
+
+                try:
+                    # Apply after all previous phase stylers.
+                    QTimer.singleShot(7600, lambda: _AALYAN_PHASE5_apply(self))
+                    QTimer.singleShot(9200, lambda: _AALYAN_PHASE5_apply(self))
+                    QTimer.singleShot(12000, lambda: _AALYAN_PHASE5_apply(self))
+
+                    # Reapply after tab changes because old patches can override.
+                    try:
+                        if hasattr(self, "tabs"):
+                            self.tabs.currentChanged.connect(
+                                lambda idx: QTimer.singleShot(450, lambda: _AALYAN_PHASE5_apply(self))
+                            )
+                    except Exception:
+                        pass
+
+                    # Reapply after theme toggle clicks.
+                    try:
+                        btn = getattr(self, "btn_aalyan_theme_toggle", None)
+                        if btn:
+                            btn.clicked.connect(lambda: QTimer.singleShot(650, lambda: _AALYAN_PHASE5_apply(self)))
+                    except Exception:
+                        pass
+
+                except Exception as e:
+                    print("[AALYAN PHASE5] delayed apply failed:", e)
+
+            obj.__init__ = new_init
+            obj._aalyan_phase5_wrapped = True
+            patched += 1
+
+        except Exception:
+            pass
+
+    print(f"[AALYAN LIQUID UI] Phase 5 windows patched: {patched}")
+
+
+_AALYAN_PHASE5_patch_windows()
+
+# ============================================================
+# END AALYAN LIQUID UI PHASE 5
+# ============================================================
+
+
+
+
+# ============================================================
+# AALYAN LIQUID UI PHASE 5.1
+# FORCE top navigation tabs away from cyan/blue.
+# This uses QApplication-level QSS + direct QTabBar styling.
+# UI-only. No backend changes.
+# ============================================================
+
+def _AALYAN_PHASE5_1_gold_tab_qss():
+    return """
+    /* AALYAN_PHASE5_1_FORCE_GOLD_TABS */
+
+    QTabWidget::pane {
+        border: none;
+        border-top: 1px solid rgba(215, 168, 77, 160);
+        background: #090D0B;
+        margin-top: 8px;
+    }
+
+    QTabBar {
+        background: #090D0B;
+    }
+
+    QTabBar::tab {
+        background: rgba(13, 20, 16, 245);
+        color: #EAF7EF;
+        border: 1px solid rgba(215, 168, 77, 180);
+        border-radius: 15px;
+        padding: 7px 17px;
+        margin: 3px 4px;
+        font-weight: 900;
+        min-width: 72px;
+    }
+
+    QTabBar::tab:selected {
+        background: qlineargradient(
+            x1:0, y1:0, x2:1, y2:1,
+            stop:0 #F2D58A,
+            stop:0.45 #D7A84D,
+            stop:1 #2E7D58
+        );
+        color: #06100B;
+        border: 1px solid rgba(255, 238, 185, 255);
+        padding: 8px 20px;
+    }
+
+    QTabBar::tab:hover:!selected {
+        background: rgba(46, 125, 88, 150);
+        color: #FFFFFF;
+        border: 1px solid rgba(242, 213, 138, 255);
+    }
+    """
+
+
+def _AALYAN_PHASE5_1_apply(gui_self):
+    try:
+        from PyQt5.QtWidgets import QApplication, QTabBar, QTabWidget
+
+        qss = _AALYAN_PHASE5_1_gold_tab_qss()
+
+        # 1) Force app-level override without removing old complete app stylesheet.
+        app = QApplication.instance()
+        if app:
+            old = app.styleSheet() or ""
+            # Keep old app style, append strongest tab override at the end.
+            if "AALYAN_PHASE5_1_FORCE_GOLD_TABS" not in old:
+                app.setStyleSheet(old + "\n\n" + qss)
+            else:
+                # Re-append to make sure it is last.
+                cleaned = old.replace(qss, "")
+                app.setStyleSheet(cleaned + "\n\n" + qss)
+
+        # 2) Force direct tab widget and tabbar stylesheet.
+        try:
+            if hasattr(gui_self, "tabs"):
+                gui_self.tabs.setStyleSheet(qss)
+                bar = gui_self.tabs.tabBar()
+                if bar:
+                    bar.setStyleSheet(qss)
+                    bar.update()
+                    bar.repaint()
+        except Exception as e:
+            print("[AALYAN 5.1] direct tabs warning:", e)
+
+        # 3) Force every QTabWidget/QTabBar in the window.
+        try:
+            for tw in gui_self.findChildren(QTabWidget):
+                tw.setStyleSheet(qss)
+                try:
+                    tw.tabBar().setStyleSheet(qss)
+                    tw.tabBar().update()
+                    tw.tabBar().repaint()
+                except Exception:
+                    pass
+
+            for tb in gui_self.findChildren(QTabBar):
+                tb.setStyleSheet(qss)
+                tb.update()
+                tb.repaint()
+        except Exception:
+            pass
+
+        print("[AALYAN LIQUID UI] Phase 5.1 applied: top tabs forced gold/green.")
+
+    except Exception as e:
+        print("[AALYAN PHASE5.1] apply failed:", e)
+
+
+def _AALYAN_PHASE5_1_patch_windows():
+    try:
+        from PyQt5.QtWidgets import QMainWindow
+        from PyQt5.QtCore import QTimer
+    except Exception as e:
+        print("[AALYAN PHASE5.1] patch import failed:", e)
+        return
+
+    patched = 0
+
+    for name, obj in list(globals().items()):
+        try:
+            if not isinstance(obj, type):
+                continue
+            if not issubclass(obj, QMainWindow):
+                continue
+            if getattr(obj, "_aalyan_phase5_1_wrapped", False):
+                continue
+
+            old_init = obj.__init__
+
+            def new_init(self, *args, __old_init=old_init, **kwargs):
+                __old_init(self, *args, **kwargs)
+
+                try:
+                    # Run after every previous timer-based patch.
+                    QTimer.singleShot(3000, lambda: _AALYAN_PHASE5_1_apply(self))
+                    QTimer.singleShot(7000, lambda: _AALYAN_PHASE5_1_apply(self))
+                    QTimer.singleShot(11000, lambda: _AALYAN_PHASE5_1_apply(self))
+                    QTimer.singleShot(15000, lambda: _AALYAN_PHASE5_1_apply(self))
+
+                    # Reapply on tab switch.
+                    try:
+                        if hasattr(self, "tabs"):
+                            self.tabs.currentChanged.connect(
+                                lambda idx: QTimer.singleShot(250, lambda: _AALYAN_PHASE5_1_apply(self))
+                            )
+                    except Exception:
+                        pass
+
+                    # Reapply after theme toggle.
+                    try:
+                        btn = getattr(self, "btn_aalyan_theme_toggle", None)
+                        if btn:
+                            btn.clicked.connect(lambda: QTimer.singleShot(900, lambda: _AALYAN_PHASE5_1_apply(self)))
+                    except Exception:
+                        pass
+
+                except Exception as e:
+                    print("[AALYAN PHASE5.1] delayed apply failed:", e)
+
+            obj.__init__ = new_init
+            obj._aalyan_phase5_1_wrapped = True
+            patched += 1
+
+        except Exception:
+            pass
+
+    print(f"[AALYAN LIQUID UI] Phase 5.1 windows patched: {patched}")
+
+
+_AALYAN_PHASE5_1_patch_windows()
+
+# ============================================================
+# END AALYAN LIQUID UI PHASE 5.1
+# ============================================================
+
+
+
+
+# ============================================================
+# AALYAN LIQUID UI PHASE 5.2
+# Fix clipped/cut result text in prediction, routing and OOD cards.
+# Style-only / layout-safe. No backend changes.
+# ============================================================
+
+def _AALYAN_PHASE5_2_scan_root(gui_self):
+    try:
+        from PyQt5.QtWidgets import QScrollArea
+        tabs = getattr(gui_self, "tabs", None)
+        if not tabs:
+            return None
+
+        for i in range(tabs.count()):
+            if str(tabs.tabText(i)).strip().lower() == "scan":
+                w = tabs.widget(i)
+                if isinstance(w, QScrollArea) and w.widget():
+                    return w.widget()
+                return w
+    except Exception:
+        pass
+    return None
+
+
+def _AALYAN_PHASE5_2_is_result_value_text(s):
+    s = str(s or "").strip()
+    low = s.lower()
+
+    if not s:
+        return False
+
+    keys = [
+        "rejected",
+        "wrong modality",
+        "modality mismatch",
+        "selected:",
+        "detected:",
+        "classifier blocked",
+        "record id:",
+        "patient:",
+        "gpio:",
+        "tier 3",
+        "urgent manual review",
+        "manual review",
+        "low confidence",
+        "glioma",
+        "meningioma",
+        "pituitary",
+        "normal",
+        "pneumonia",
+        "ood",
+        "clear",
+        "mismatch",
+    ]
+
+    return len(s) > 18 or any(k in low for k in keys)
+
+
+def _AALYAN_PHASE5_2_fix_label(lbl):
+    try:
+        from PyQt5.QtCore import Qt
+        from PyQt5.QtWidgets import QSizePolicy
+
+        txt = str(lbl.text() or "").strip()
+        if not _AALYAN_PHASE5_2_is_result_value_text(txt):
+            return
+
+        # Do not disturb static field titles too much.
+        low = txt.lower()
+        is_title = low in {
+            "predicted class:",
+            "mc uncertainty:",
+            "routing tier:",
+            "ood status:",
+            "phi-2 clinical report:",
+            "patient:",
+            "modality:",
+        }
+
+        lbl.setWordWrap(True)
+        lbl.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        lbl.setToolTip(txt)
+        lbl.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        lbl.setMinimumHeight(24)
+
+        if is_title:
+            lbl.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            lbl.setStyleSheet("""
+            QLabel {
+                background: transparent;
+                border: none;
+                color: #F2D58A;
+                font-weight: 950;
+                font-size: 12px;
+                padding: 0px;
+            }
+            """)
+            return
+
+        # Value labels: allow multi-line, avoid clipping.
+        if len(txt) > 70:
+            font_size = 11
+            min_h = 54
+        elif len(txt) > 38:
+            font_size = 12
+            min_h = 42
+        else:
+            font_size = 13
+            min_h = 30
+
+        lbl.setMinimumHeight(min_h)
+        lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        # Keep red warning color for mismatch/rejected text.
+        if any(k in low for k in ["rejected", "wrong modality", "mismatch", "blocked", "tier 3", "urgent", "gpio: red"]):
+            color = "#FF3B6B"
+        elif any(k in low for k in ["clear", "normal", "accepted"]):
+            color = "#6CFF9D"
+        else:
+            color = "#F2D58A"
+
+        lbl.setStyleSheet(f"""
+        QLabel {{
+            background: transparent;
+            border: none;
+            color: {color};
+            font-weight: 950;
+            font-size: {font_size}px;
+            padding: 2px 6px;
+        }}
+        """)
+
+        # Increase parent card height safely.
+        card = lbl.parent()
+        if card:
+            try:
+                card.setMinimumHeight(max(card.minimumHeight(), min_h + 28))
+                card.setStyleSheet("""
+                QWidget#AALYANResultCard {
+                    background: rgba(17, 25, 21, 235);
+                    border: 1px solid rgba(215,168,77,75);
+                    border-left: 4px solid #D7A84D;
+                    border-radius: 18px;
+                }
+                QWidget#AALYANResultCard QLabel {
+                    background: transparent;
+                    border: none;
+                }
+                """)
+            except Exception:
+                pass
+
+    except Exception as e:
+        print("[AALYAN 5.2] label fix warning:", e)
+
+
+def _AALYAN_PHASE5_2_apply(gui_self):
+    try:
+        from PyQt5.QtWidgets import QLabel
+
+        root = _AALYAN_PHASE5_2_scan_root(gui_self)
+        if root is None:
+            return
+
+        # Fix all long/result labels.
+        fixed = 0
+        for lbl in root.findChildren(QLabel):
+            before = str(lbl.text() or "")
+            if _AALYAN_PHASE5_2_is_result_value_text(before):
+                _AALYAN_PHASE5_2_fix_label(lbl)
+                fixed += 1
+
+        # Also adjust known result card parents by static titles.
+        result_titles = ["predicted class:", "mc uncertainty:", "routing tier:", "ood status:"]
+        for lbl in root.findChildren(QLabel):
+            low = str(lbl.text() or "").strip().lower()
+            if low in result_titles:
+                card = lbl.parent()
+                if card:
+                    try:
+                        if not card.objectName():
+                            card.setObjectName("AALYANResultCard")
+                        card.setMinimumHeight(max(card.minimumHeight(), 64))
+                    except Exception:
+                        pass
+
+        print(f"[AALYAN LIQUID UI] Phase 5.2 applied: wrapped result labels ({fixed}).")
+
+    except Exception as e:
+        print("[AALYAN PHASE5.2] apply failed:", e)
+
+
+def _AALYAN_PHASE5_2_patch_on_analysis():
+    """
+    Wrap analysis completion method so text wrapping is applied immediately
+    after new result labels are updated.
+    """
+    try:
+        from PyQt5.QtWidgets import QMainWindow
+        from PyQt5.QtCore import QTimer
+    except Exception:
+        return
+
+    patched = 0
+
+    for name, obj in list(globals().items()):
+        try:
+            if not isinstance(obj, type):
+                continue
+            if not issubclass(obj, QMainWindow):
+                continue
+
+            # Wrap on_analysis_complete if present.
+            if hasattr(obj, "on_analysis_complete") and not getattr(obj, "_aalyan_5_2_analysis_wrapped", False):
+                old = obj.on_analysis_complete
+
+                def new_on_analysis_complete(self, *args, __old=old, **kwargs):
+                    result = __old(self, *args, **kwargs)
+                    try:
+                        QTimer.singleShot(100, lambda: _AALYAN_PHASE5_2_apply(self))
+                        QTimer.singleShot(500, lambda: _AALYAN_PHASE5_2_apply(self))
+                    except Exception:
+                        pass
+                    return result
+
+                obj.on_analysis_complete = new_on_analysis_complete
+                obj._aalyan_5_2_analysis_wrapped = True
+                patched += 1
+
+        except Exception:
+            pass
+
+    print(f"[AALYAN LIQUID UI] Phase 5.2 analysis methods wrapped: {patched}")
+
+
+def _AALYAN_PHASE5_2_patch_windows():
+    try:
+        from PyQt5.QtWidgets import QMainWindow
+        from PyQt5.QtCore import QTimer
+    except Exception as e:
+        print("[AALYAN PHASE5.2] patch import failed:", e)
+        return
+
+    _AALYAN_PHASE5_2_patch_on_analysis()
+
+    patched = 0
+
+    for name, obj in list(globals().items()):
+        try:
+            if not isinstance(obj, type):
+                continue
+            if not issubclass(obj, QMainWindow):
+                continue
+            if getattr(obj, "_aalyan_phase5_2_wrapped", False):
+                continue
+
+            old_init = obj.__init__
+
+            def new_init(self, *args, __old_init=old_init, **kwargs):
+                __old_init(self, *args, **kwargs)
+
+                try:
+                    # Apply repeatedly after all other styling patches.
+                    QTimer.singleShot(4500, lambda: _AALYAN_PHASE5_2_apply(self))
+                    QTimer.singleShot(8500, lambda: _AALYAN_PHASE5_2_apply(self))
+                    QTimer.singleShot(12500, lambda: _AALYAN_PHASE5_2_apply(self))
+
+                    # Periodic light maintenance so new text never cuts.
+                    timer = QTimer(self)
+                    timer.setInterval(1500)
+                    timer.timeout.connect(lambda: _AALYAN_PHASE5_2_apply(self))
+                    timer.start()
+                    self._aalyan_phase5_2_timer = timer
+
+                    # Reapply on tab switch.
+                    try:
+                        if hasattr(self, "tabs"):
+                            self.tabs.currentChanged.connect(
+                                lambda idx: QTimer.singleShot(300, lambda: _AALYAN_PHASE5_2_apply(self))
+                            )
+                    except Exception:
+                        pass
+
+                except Exception as e:
+                    print("[AALYAN PHASE5.2] delayed apply failed:", e)
+
+            obj.__init__ = new_init
+            obj._aalyan_phase5_2_wrapped = True
+            patched += 1
+
+        except Exception:
+            pass
+
+    print(f"[AALYAN LIQUID UI] Phase 5.2 windows patched: {patched}")
+
+
+_AALYAN_PHASE5_2_patch_windows()
+
+# ============================================================
+# END AALYAN LIQUID UI PHASE 5.2
+# ============================================================
+
+
+
+
+# ============================================================
+# AALYAN LIQUID UI PHASE 5.3
+# Fix Original/Grad-CAM/SHAP viewer mapping + clipped result text.
+# UI-only. No backend/API/DICOM/FHIR/PDF changes.
+# ============================================================
+
+def _AALYAN_XAI53_scan_root(gui_self):
+    try:
+        from PyQt5.QtWidgets import QScrollArea
+        tabs = getattr(gui_self, "tabs", None)
+        if not tabs:
+            return None
+
+        for i in range(tabs.count()):
+            if str(tabs.tabText(i)).strip().lower() == "scan":
+                w = tabs.widget(i)
+                if isinstance(w, QScrollArea) and w.widget():
+                    return w.widget()
+                return w
+    except Exception:
+        pass
+    return None
+
+
+def _AALYAN_XAI53_is_image_file(path):
+    try:
+        from pathlib import Path
+        s = str(path or "").strip()
+        if not s:
+            return False
+        p = Path(s)
+        return p.exists() and p.is_file() and p.suffix.lower() in {
+            ".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff", ".dcm"
+        }
+    except Exception:
+        return False
+
+
+def _AALYAN_XAI53_get_selected_image(gui_self):
+    """
+    Find the actual uploaded/camera selected image path.
+    Supports old and patched variable names.
+    """
+    candidates = []
+
+    try:
+        candidates.append(globals().get("_AALYAN_TRUE_SELECTED_SCAN_IMAGE", ""))
+    except Exception:
+        pass
+
+    for attr in [
+        "_aalyan_selected_scan_image",
+        "selected_scan_image",
+        "selected_image_path",
+        "scan_image_path",
+        "current_image_path",
+        "current_scan_path",
+        "image_path",
+        "last_image_path",
+        "uploaded_image_path",
+        "dicom_image_path",
+        "current_file_path",
+    ]:
+        try:
+            candidates.append(getattr(gui_self, attr, ""))
+        except Exception:
+            pass
+
+    # Also check latest analysis cache
+    try:
+        data = getattr(gui_self, "_aalyan_last_analysis_data", None)
+        if isinstance(data, dict):
+            for key in [
+                "input_image_path", "image_path", "original_path", "original_image",
+                "uploaded_image", "source_image", "file_path"
+            ]:
+                candidates.append(data.get(key, ""))
+    except Exception:
+        pass
+
+    for c in candidates:
+        if _AALYAN_XAI53_is_image_file(c):
+            return str(c)
+
+    return ""
+
+
+def _AALYAN_XAI53_extract_image_paths_from_data(data):
+    """
+    Recursively scan backend/API result dict for original, gradcam, shap image paths.
+    """
+    out = {
+        "original": "",
+        "gradcam": "",
+        "shap": "",
+    }
+
+    def visit(obj, key_hint=""):
+        try:
+            if isinstance(obj, dict):
+                for k, v in obj.items():
+                    visit(v, str(k).lower())
+            elif isinstance(obj, (list, tuple)):
+                for v in obj:
+                    visit(v, key_hint)
+            else:
+                s = str(obj or "").strip()
+                low = (key_hint + " " + s).lower()
+
+                if not _AALYAN_XAI53_is_image_file(s):
+                    return
+
+                if "shap" in low:
+                    out["shap"] = out["shap"] or s
+                elif "grad" in low or "cam" in low or "heatmap" in low or "overlay" in low:
+                    out["gradcam"] = out["gradcam"] or s
+                elif "original" in low or "source" in low or "input" in low or "uploaded" in low:
+                    out["original"] = out["original"] or s
+        except Exception:
+            pass
+
+    visit(data)
+
+    return out
+
+
+def _AALYAN_XAI53_get_xai_paths(gui_self):
+    paths = {"original": "", "gradcam": "", "shap": ""}
+
+    # selected image is original fallback
+    sel = _AALYAN_XAI53_get_selected_image(gui_self)
+    if sel:
+        paths["original"] = sel
+
+    # common attributes
+    attr_map = {
+        "original": [
+            "original_image_path", "original_path", "input_image_path",
+            "selected_image_path", "_aalyan_selected_scan_image"
+        ],
+        "gradcam": [
+            "gradcam_path", "grad_cam_path", "gradcam_image_path",
+            "cam_path", "overlay_path", "heatmap_path"
+        ],
+        "shap": [
+            "shap_path", "shap_image_path", "shap_overlay_path",
+            "shap_explanation_path"
+        ],
+    }
+
+    for kind, attrs in attr_map.items():
+        for attr in attrs:
+            try:
+                v = getattr(gui_self, attr, "")
+                if _AALYAN_XAI53_is_image_file(v):
+                    paths[kind] = str(v)
+                    break
+            except Exception:
+                pass
+
+    # latest analysis data recursive extraction
+    try:
+        data = getattr(gui_self, "_aalyan_last_analysis_data", None)
+        if isinstance(data, dict):
+            found = _AALYAN_XAI53_extract_image_paths_from_data(data)
+            for k in paths:
+                if found.get(k):
+                    paths[k] = found[k]
+    except Exception:
+        pass
+
+    # global last data, if present
+    try:
+        data = globals().get("_AALYAN_LAST_ANALYSIS_DATA", None)
+        if isinstance(data, dict):
+            found = _AALYAN_XAI53_extract_image_paths_from_data(data)
+            for k in paths:
+                if found.get(k):
+                    paths[k] = found[k]
+    except Exception:
+        pass
+
+    return paths
+
+
+def _AALYAN_XAI53_find_viewer_label(gui_self):
+    """
+    Find the large image display QLabel in Scan tab.
+    """
+    try:
+        from PyQt5.QtWidgets import QLabel
+
+        root = _AALYAN_XAI53_scan_root(gui_self)
+        if root is None:
+            return None
+
+        labels = root.findChildren(QLabel)
+        best = None
+        best_score = -1
+
+        for lbl in labels:
+            try:
+                w = max(lbl.width(), lbl.minimumWidth())
+                h = max(lbl.height(), lbl.minimumHeight())
+                text = str(lbl.text() or "").lower()
+
+                score = w * h
+
+                # Prefer large viewer-like labels
+                if "drop dicom here" in text:
+                    score += 10_000_000
+                if "original image not loaded" in text or "shap" in text or "grad" in text:
+                    score += 5_000_000
+
+                # pixmap labels are also likely viewer
+                try:
+                    pm = lbl.pixmap()
+                    if pm is not None and not pm.isNull():
+                        score += 8_000_000
+                except Exception:
+                    pass
+
+                if w >= 250 and h >= 180 and score > best_score:
+                    best = lbl
+                    best_score = score
+            except Exception:
+                pass
+
+        return best
+
+    except Exception as e:
+        print("[AALYAN XAI 5.3] viewer find failed:", e)
+        return None
+
+
+def _AALYAN_XAI53_show_message(gui_self, message):
+    try:
+        from PyQt5.QtCore import Qt
+
+        lbl = _AALYAN_XAI53_find_viewer_label(gui_self)
+        if lbl is None:
+            print("[AALYAN XAI 5.3]", message)
+            return
+
+        lbl.clear()
+        lbl.setText(str(message))
+        lbl.setAlignment(Qt.AlignCenter)
+        lbl.setWordWrap(True)
+        lbl.setStyleSheet("""
+        QLabel {
+            background: qradialgradient(
+                cx:0.5, cy:0.5, radius:0.85,
+                fx:0.5, fy:0.5,
+                stop:0 rgba(25,34,29,210),
+                stop:0.55 rgba(5,8,7,250),
+                stop:1 rgba(0,0,0,255)
+            );
+            color: #F2D58A;
+            border: 1px solid rgba(215,168,77,120);
+            border-radius: 24px;
+            font-weight: 900;
+            font-size: 15px;
+            padding: 18px;
+        }
+        """)
+    except Exception as e:
+        print("[AALYAN XAI 5.3] show message failed:", e)
+
+
+def _AALYAN_XAI53_show_image(gui_self, path, mode="Original"):
+    try:
+        from PyQt5.QtGui import QPixmap
+        from PyQt5.QtCore import Qt
+
+        lbl = _AALYAN_XAI53_find_viewer_label(gui_self)
+        if lbl is None:
+            print("[AALYAN XAI 5.3] Viewer label not found.")
+            return False
+
+        if not _AALYAN_XAI53_is_image_file(path):
+            _AALYAN_XAI53_show_message(gui_self, f"{mode} image not available for this run.")
+            return False
+
+        pm = QPixmap(str(path))
+        if pm.isNull():
+            _AALYAN_XAI53_show_message(gui_self, f"{mode} image could not be loaded:\n{path}")
+            return False
+
+        # Save last displayed path
+        gui_self._aalyan_xai53_current_mode = mode
+        gui_self._aalyan_xai53_current_path = str(path)
+
+        size = lbl.size()
+        if size.width() < 50 or size.height() < 50:
+            scaled = pm
+        else:
+            scaled = pm.scaled(size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+
+        lbl.clear()
+        lbl.setAlignment(Qt.AlignCenter)
+        lbl.setPixmap(scaled)
+        lbl.setToolTip(f"{mode}: {path}")
+        lbl.setStyleSheet("""
+        QLabel {
+            background: #000000;
+            border: 1px solid rgba(215,168,77,135);
+            border-radius: 22px;
+            padding: 8px;
+        }
+        """)
+
+        print(f"[AALYAN XAI 5.3] Showing {mode}: {path}")
+        return True
+
+    except Exception as e:
+        print("[AALYAN XAI 5.3] show image failed:", e)
+        return False
+
+
+def _AALYAN_XAI53_button_action(gui_self, mode):
+    paths = _AALYAN_XAI53_get_xai_paths(gui_self)
+
+    mode_low = str(mode).lower()
+
+    if mode_low == "original":
+        if paths.get("original"):
+            _AALYAN_XAI53_show_image(gui_self, paths["original"], "Original")
+        else:
+            _AALYAN_XAI53_show_message(
+                gui_self,
+                "Original image not loaded.\nUpload an image first, then click Original."
+            )
+
+    elif mode_low == "gradcam":
+        if paths.get("gradcam"):
+            _AALYAN_XAI53_show_image(gui_self, paths["gradcam"], "Grad-CAM")
+        elif paths.get("original"):
+            # fallback: current backend may already overlay on original in viewer
+            _AALYAN_XAI53_show_image(gui_self, paths["original"], "Original fallback")
+            _AALYAN_XAI53_show_message(
+                gui_self,
+                "Grad-CAM path was not returned for this run.\nShowing original image fallback."
+            )
+        else:
+            _AALYAN_XAI53_show_message(gui_self, "Grad-CAM image not available yet.")
+
+    elif mode_low == "shap":
+        if paths.get("shap"):
+            _AALYAN_XAI53_show_image(gui_self, paths["shap"], "SHAP")
+        else:
+            # Important clinical truth: SHAP may not exist for mismatch/OOD cases.
+            _AALYAN_XAI53_show_message(
+                gui_self,
+                "SHAP explanation not available for this run.\n\n"
+                "If the scan was rejected by the OOD/modality guard, the classifier was blocked, "
+                "so SHAP is intentionally not generated.\n\n"
+                "Run a valid modality scan to generate SHAP."
+            )
+
+
+def _AALYAN_XAI53_reconnect_buttons(gui_self):
+    try:
+        from PyQt5.QtWidgets import QPushButton
+
+        root = _AALYAN_XAI53_scan_root(gui_self)
+        if root is None:
+            return
+
+        count = 0
+
+        for btn in root.findChildren(QPushButton):
+            t = btn.text().strip().lower()
+
+            if t == "original":
+                try:
+                    btn.clicked.disconnect()
+                except Exception:
+                    pass
+                btn.clicked.connect(lambda checked=False, s=gui_self: _AALYAN_XAI53_button_action(s, "original"))
+                count += 1
+
+            elif "grad" in t and "cam" in t:
+                try:
+                    btn.clicked.disconnect()
+                except Exception:
+                    pass
+                btn.clicked.connect(lambda checked=False, s=gui_self: _AALYAN_XAI53_button_action(s, "gradcam"))
+                count += 1
+
+            elif t == "shap":
+                try:
+                    btn.clicked.disconnect()
+                except Exception:
+                    pass
+                btn.clicked.connect(lambda checked=False, s=gui_self: _AALYAN_XAI53_button_action(s, "shap"))
+                count += 1
+
+        if count:
+            print(f"[AALYAN XAI 5.3] XAI buttons reconnected: {count}")
+
+    except Exception as e:
+        print("[AALYAN XAI 5.3] reconnect failed:", e)
+
+
+def _AALYAN_XAI53_fix_text_clipping(gui_self):
+    """
+    Stronger fix for clipped long red mismatch/result text.
+    """
+    try:
+        from PyQt5.QtWidgets import QLabel, QSizePolicy
+        from PyQt5.QtCore import Qt
+
+        root = _AALYAN_XAI53_scan_root(gui_self)
+        if root is None:
+            return
+
+        keywords = [
+            "rejected", "wrong modality", "modality mismatch", "selected:",
+            "detected:", "classifier blocked", "record id", "tier 3",
+            "manual review", "gpio", "ood", "mismatch"
+        ]
+
+        fixed = 0
+
+        for lbl in root.findChildren(QLabel):
+            txt = str(lbl.text() or "").strip()
+            low = txt.lower()
+
+            if not txt:
+                continue
+
+            # Only fix long/result labels, not top header labels.
+            if len(txt) < 20 and not any(k in low for k in keywords):
+                continue
+
+            if not any(k in low for k in keywords) and len(txt) < 45:
+                continue
+
+            lbl.setWordWrap(True)
+            lbl.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            lbl.setToolTip(txt)
+            lbl.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.MinimumExpanding)
+            lbl.setMinimumHeight(46)
+            lbl.setMaximumHeight(16777215)
+
+            if any(k in low for k in ["rejected", "wrong modality", "mismatch", "blocked", "gpio: red", "tier 3"]):
+                color = "#FF3B6B"
+            elif any(k in low for k in ["clear", "accepted", "normal"]):
+                color = "#6CFF9D"
+            else:
+                color = "#F2D58A"
+
+            lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            lbl.setStyleSheet(f"""
+            QLabel {{
+                background: transparent;
+                border: none;
+                color: {color};
+                font-weight: 950;
+                font-size: 11px;
+                padding: 3px 8px;
+            }}
+            """)
+
+            card = lbl.parent()
+            if card is not None:
+                try:
+                    card.setMinimumHeight(88)
+                    card.setMaximumHeight(16777215)
+                    card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.MinimumExpanding)
+                except Exception:
+                    pass
+
+            fixed += 1
+
+        if fixed:
+            print(f"[AALYAN XAI 5.3] Text clipping fixed labels: {fixed}")
+
+    except Exception as e:
+        print("[AALYAN XAI 5.3] text clipping fix failed:", e)
+
+
+def _AALYAN_XAI53_wrap_selected_setter():
+    """
+    If Phase TRUE upload split exists, wrap its selected image setter so Original button knows the path.
+    """
+    try:
+        old = globals().get("_AALYAN_TRUE_set_selected_image", None)
+        if old is None:
+            return
+
+        if getattr(old, "_aalyan_xai53_wrapped", False):
+            return
+
+        def wrapped(gui_self, path, source="Selected"):
+            try:
+                gui_self._aalyan_selected_scan_image = str(path or "")
+                globals()["_AALYAN_TRUE_SELECTED_SCAN_IMAGE"] = str(path or "")
+            except Exception:
+                pass
+
+            result = old(gui_self, path, source)
+
+            try:
+                _AALYAN_XAI53_reconnect_buttons(gui_self)
+                _AALYAN_XAI53_fix_text_clipping(gui_self)
+            except Exception:
+                pass
+
+            return result
+
+        wrapped._aalyan_xai53_wrapped = True
+        globals()["_AALYAN_TRUE_set_selected_image"] = wrapped
+
+        print("[AALYAN XAI 5.3] Wrapped selected image setter.")
+
+    except Exception as e:
+        print("[AALYAN XAI 5.3] setter wrap failed:", e)
+
+
+def _AALYAN_XAI53_wrap_analysis_complete():
+    """
+    Cache backend result data and reconnect/fix after analysis.
+    """
+    try:
+        from PyQt5.QtWidgets import QMainWindow
+        from PyQt5.QtCore import QTimer
+    except Exception:
+        return
+
+    patched = 0
+
+    for name, obj in list(globals().items()):
+        try:
+            if not isinstance(obj, type):
+                continue
+            if not issubclass(obj, QMainWindow):
+                continue
+
+            if hasattr(obj, "on_analysis_complete") and not getattr(obj, "_aalyan_xai53_analysis_wrapped", False):
+                old = obj.on_analysis_complete
+
+                def new_on_analysis_complete(self, data, *args, __old=old, **kwargs):
+                    try:
+                        self._aalyan_last_analysis_data = data
+                        globals()["_AALYAN_LAST_ANALYSIS_DATA"] = data
+                    except Exception:
+                        pass
+
+                    result = __old(self, data, *args, **kwargs)
+
+                    try:
+                        QTimer.singleShot(120, lambda: _AALYAN_XAI53_reconnect_buttons(self))
+                        QTimer.singleShot(180, lambda: _AALYAN_XAI53_fix_text_clipping(self))
+                        QTimer.singleShot(600, lambda: _AALYAN_XAI53_fix_text_clipping(self))
+                    except Exception:
+                        pass
+
+                    return result
+
+                obj.on_analysis_complete = new_on_analysis_complete
+                obj._aalyan_xai53_analysis_wrapped = True
+                patched += 1
+
+        except Exception:
+            pass
+
+    print(f"[AALYAN XAI 5.3] Analysis complete wrapped: {patched}")
+
+
+def _AALYAN_XAI53_install(gui_self):
+    try:
+        from PyQt5.QtCore import QTimer
+
+        _AALYAN_XAI53_wrap_selected_setter()
+        _AALYAN_XAI53_reconnect_buttons(gui_self)
+        _AALYAN_XAI53_fix_text_clipping(gui_self)
+
+        # Keep light maintenance because old UI callbacks may overwrite labels.
+        if not getattr(gui_self, "_aalyan_xai53_timer_started", False):
+            timer = QTimer(gui_self)
+            timer.setInterval(1800)
+            timer.timeout.connect(lambda: (
+                _AALYAN_XAI53_reconnect_buttons(gui_self),
+                _AALYAN_XAI53_fix_text_clipping(gui_self)
+            ))
+            timer.start()
+            gui_self._aalyan_xai53_timer = timer
+            gui_self._aalyan_xai53_timer_started = True
+
+        print("[AALYAN XAI 5.3] Installed.")
+
+    except Exception as e:
+        print("[AALYAN XAI 5.3] install failed:", e)
+
+
+def _AALYAN_XAI53_patch_windows():
+    try:
+        from PyQt5.QtWidgets import QMainWindow
+        from PyQt5.QtCore import QTimer
+    except Exception as e:
+        print("[AALYAN XAI 5.3] patch import failed:", e)
+        return
+
+    _AALYAN_XAI53_wrap_selected_setter()
+    _AALYAN_XAI53_wrap_analysis_complete()
+
+    patched = 0
+
+    for name, obj in list(globals().items()):
+        try:
+            if not isinstance(obj, type):
+                continue
+            if not issubclass(obj, QMainWindow):
+                continue
+            if getattr(obj, "_aalyan_xai53_init_wrapped", False):
+                continue
+
+            old_init = obj.__init__
+
+            def new_init(self, *args, __old_init=old_init, **kwargs):
+                __old_init(self, *args, **kwargs)
+
+                try:
+                    # Run after all previous UI phases.
+                    QTimer.singleShot(2500, lambda: _AALYAN_XAI53_install(self))
+                    QTimer.singleShot(6500, lambda: _AALYAN_XAI53_install(self))
+                    QTimer.singleShot(10500, lambda: _AALYAN_XAI53_install(self))
+
+                    try:
+                        if hasattr(self, "tabs"):
+                            self.tabs.currentChanged.connect(
+                                lambda idx: QTimer.singleShot(350, lambda: _AALYAN_XAI53_install(self))
+                            )
+                    except Exception:
+                        pass
+
+                except Exception as e:
+                    print("[AALYAN XAI 5.3] delayed install failed:", e)
+
+            obj.__init__ = new_init
+            obj._aalyan_xai53_init_wrapped = True
+            patched += 1
+
+        except Exception:
+            pass
+
+    print(f"[AALYAN XAI 5.3] Windows patched: {patched}")
+
+
+_AALYAN_XAI53_patch_windows()
+
+# ============================================================
+# END AALYAN LIQUID UI PHASE 5.3
+# ============================================================
+
+
+
+
+# ============================================================
+# AALYAN LIQUID UI PHASE 5.4
+# Lock result-card heights and stop dynamic jumping.
+# Fixes changing size/position caused by Phase 5.2 text timer.
+# UI-only. No backend/API/DICOM/FHIR/PDF changes.
+# ============================================================
+
+def _AALYAN_PHASE5_4_scan_root(gui_self):
+    try:
+        from PyQt5.QtWidgets import QScrollArea
+        tabs = getattr(gui_self, "tabs", None)
+        if not tabs:
+            return None
+
+        for i in range(tabs.count()):
+            if str(tabs.tabText(i)).strip().lower() == "scan":
+                w = tabs.widget(i)
+                if isinstance(w, QScrollArea) and w.widget():
+                    return w.widget()
+                return w
+    except Exception:
+        pass
+    return None
+
+
+def _AALYAN_PHASE5_4_card_type_from_label_text(txt):
+    low = str(txt or "").strip().lower()
+
+    if "predicted class" in low:
+        return "prediction"
+    if "mc uncertainty" in low:
+        return "uncertainty"
+    if "routing tier" in low:
+        return "routing"
+    if "ood status" in low:
+        return "ood"
+
+    return ""
+
+
+def _AALYAN_PHASE5_4_lock_cards(gui_self):
+    try:
+        from PyQt5.QtWidgets import QLabel, QSizePolicy
+        from PyQt5.QtCore import Qt
+
+        root = _AALYAN_PHASE5_4_scan_root(gui_self)
+        if root is None:
+            return
+
+        # Fixed heights. No dynamic resizing.
+        fixed_heights = {
+            "prediction": 84,
+            "uncertainty": 74,
+            "routing": 84,
+            "ood": 84,
+        }
+
+        fixed = 0
+
+        for lbl in root.findChildren(QLabel):
+            card_type = _AALYAN_PHASE5_4_card_type_from_label_text(lbl.text())
+            if not card_type:
+                continue
+
+            card = lbl.parent()
+            if card is None:
+                continue
+
+            h = fixed_heights.get(card_type, 80)
+
+            try:
+                if not card.objectName():
+                    card.setObjectName("AALYANStableResultCard")
+
+                card.setMinimumHeight(h)
+                card.setMaximumHeight(h)
+                card.setFixedHeight(h)
+                card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+                card.setStyleSheet("""
+                QWidget#AALYANStableResultCard {
+                    background: rgba(17, 25, 21, 235);
+                    border: 1px solid rgba(215,168,77,85);
+                    border-left: 4px solid #D7A84D;
+                    border-radius: 18px;
+                }
+
+                QWidget#AALYANStableResultCard QLabel {
+                    background: transparent;
+                    border: none;
+                }
+                """)
+            except Exception:
+                pass
+
+            fixed += 1
+
+        # Clean labels inside cards without changing height.
+        for lbl in root.findChildren(QLabel):
+            txt = str(lbl.text() or "").strip()
+            low = txt.lower()
+
+            # Titles
+            if any(k in low for k in ["predicted class:", "mc uncertainty:", "routing tier:", "ood status:"]):
+                try:
+                    lbl.setWordWrap(False)
+                    lbl.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+                    lbl.setMinimumHeight(18)
+                    lbl.setMaximumHeight(22)
+                    lbl.setStyleSheet("""
+                    QLabel {
+                        background: transparent;
+                        border: none;
+                        color: #F2D58A;
+                        font-weight: 950;
+                        font-size: 12px;
+                        padding: 0px;
+                    }
+                    """)
+                except Exception:
+                    pass
+                continue
+
+            # Long result values
+            result_keywords = [
+                "record id", "patient:", "modality:", "tier", "gpio",
+                "rejected", "wrong modality", "modality mismatch",
+                "selected:", "detected:", "classifier blocked",
+                "clear", "glioma", "meningioma", "pituitary", "pneumonia",
+                "normal", "urgent manual review", "auto-sr"
+            ]
+
+            if txt and (len(txt) > 18 or any(k in low for k in result_keywords)):
+                try:
+                    lbl.setToolTip(txt)
+                    lbl.setWordWrap(True)
+                    lbl.setTextInteractionFlags(Qt.TextSelectableByMouse)
+                    lbl.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+                    lbl.setMinimumHeight(28)
+                    lbl.setMaximumHeight(52)
+
+                    if any(k in low for k in ["rejected", "wrong modality", "mismatch", "blocked", "gpio: red", "urgent"]):
+                        color = "#FF3B6B"
+                    elif any(k in low for k in ["clear", "normal", "green", "auto-sr"]):
+                        color = "#6CFF9D"
+                    else:
+                        color = "#F2D58A"
+
+                    lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                    lbl.setStyleSheet(f"""
+                    QLabel {{
+                        background: transparent;
+                        border: none;
+                        color: {color};
+                        font-weight: 950;
+                        font-size: 11px;
+                        padding: 2px 8px;
+                    }}
+                    """)
+                except Exception:
+                    pass
+
+        if fixed:
+            print(f"[AALYAN LIQUID UI] Phase 5.4 locked result cards: {fixed}")
+
+    except Exception as e:
+        print("[AALYAN PHASE5.4] lock cards failed:", e)
+
+
+# Override Phase 5.2 dynamic apply with stable version.
+# Existing timer uses global name lookup, so this stops the jumping.
+def _AALYAN_PHASE5_2_apply(gui_self):
+    try:
+        _AALYAN_PHASE5_4_lock_cards(gui_self)
+    except Exception:
+        pass
+
+
+# Override XAI 5.3 text clipping function so it does not resize cards dynamically.
+def _AALYAN_XAI53_fix_text_clipping(gui_self):
+    try:
+        _AALYAN_PHASE5_4_lock_cards(gui_self)
+    except Exception:
+        pass
+
+
+def _AALYAN_PHASE5_4_patch_windows():
+    try:
+        from PyQt5.QtWidgets import QMainWindow
+        from PyQt5.QtCore import QTimer
+    except Exception as e:
+        print("[AALYAN PHASE5.4] patch import failed:", e)
+        return
+
+    patched = 0
+
+    for name, obj in list(globals().items()):
+        try:
+            if not isinstance(obj, type):
+                continue
+            if not issubclass(obj, QMainWindow):
+                continue
+            if getattr(obj, "_aalyan_phase5_4_wrapped", False):
+                continue
+
+            old_init = obj.__init__
+
+            def new_init(self, *args, __old_init=old_init, **kwargs):
+                __old_init(self, *args, **kwargs)
+
+                try:
+                    QTimer.singleShot(3500, lambda: _AALYAN_PHASE5_4_lock_cards(self))
+                    QTimer.singleShot(7500, lambda: _AALYAN_PHASE5_4_lock_cards(self))
+                    QTimer.singleShot(12000, lambda: _AALYAN_PHASE5_4_lock_cards(self))
+
+                    # Stable maintenance, no dynamic height changes.
+                    timer = QTimer(self)
+                    timer.setInterval(2500)
+                    timer.timeout.connect(lambda: _AALYAN_PHASE5_4_lock_cards(self))
+                    timer.start()
+                    self._aalyan_phase5_4_timer = timer
+
+                    try:
+                        if hasattr(self, "tabs"):
+                            self.tabs.currentChanged.connect(
+                                lambda idx: QTimer.singleShot(300, lambda: _AALYAN_PHASE5_4_lock_cards(self))
+                            )
+                    except Exception:
+                        pass
+
+                except Exception as e:
+                    print("[AALYAN PHASE5.4] delayed lock failed:", e)
+
+            obj.__init__ = new_init
+            obj._aalyan_phase5_4_wrapped = True
+            patched += 1
+
+        except Exception:
+            pass
+
+    print(f"[AALYAN LIQUID UI] Phase 5.4 windows patched: {patched}")
+
+
+_AALYAN_PHASE5_4_patch_windows()
+
+# ============================================================
+# END AALYAN LIQUID UI PHASE 5.4
+# ============================================================
+
+
+
+
+# ============================================================
+# AALYAN LIQUID UI PHASE 6
+# Force top navigation away from cyan/blue.
+# Works on QTabWidget/QTabBar and custom QPushButton tab bars.
+# UI-only. No backend/API/DICOM/FHIR/PDF changes.
+# ============================================================
+
+def _AALYAN_PHASE6_gold_tab_qss():
+    return """
+    QTabWidget::pane {
+        border: none;
+        border-top: 1px solid rgba(215, 168, 77, 150);
+        background: #090D0B;
+        margin-top: 8px;
+    }
+
+    QTabBar {
+        background: #090D0B;
+    }
+
+    QTabBar::tab {
+        background: rgba(13, 20, 16, 245);
+        color: #EAF7EF;
+        border: 1px solid rgba(215, 168, 77, 180);
+        border-radius: 15px;
+        padding: 7px 17px;
+        margin: 3px 4px;
+        font-weight: 900;
+        min-width: 72px;
+    }
+
+    QTabBar::tab:selected {
+        background: qlineargradient(
+            x1:0, y1:0, x2:1, y2:1,
+            stop:0 #F2D58A,
+            stop:0.45 #D7A84D,
+            stop:1 #2E7D58
+        );
+        color: #06100B;
+        border: 1px solid rgba(255, 238, 185, 255);
+        padding: 8px 20px;
+    }
+
+    QTabBar::tab:hover:!selected {
+        background: rgba(46, 125, 88, 150);
+        color: #FFFFFF;
+        border: 1px solid rgba(242, 213, 138, 255);
+    }
+    """
+
+
+def _AALYAN_PHASE6_nav_button_style(active=False):
+    if active:
+        return """
+        QPushButton {
+            background: qlineargradient(
+                x1:0, y1:0, x2:1, y2:1,
+                stop:0 #F2D58A,
+                stop:0.45 #D7A84D,
+                stop:1 #2E7D58
+            );
+            color: #06100B;
+            border: 1px solid rgba(255, 238, 185, 255);
+            border-radius: 15px;
+            padding: 7px 17px;
+            font-weight: 950;
+            min-width: 72px;
+        }
+        QPushButton:hover {
+            background: #F2D58A;
+            color: #06100B;
+        }
+        """
+    return """
+    QPushButton {
+        background: rgba(13, 20, 16, 245);
+        color: #EAF7EF;
+        border: 1px solid rgba(215, 168, 77, 180);
+        border-radius: 15px;
+        padding: 7px 17px;
+        font-weight: 900;
+        min-width: 72px;
+    }
+    QPushButton:hover {
+        background: rgba(46, 125, 88, 150);
+        color: #FFFFFF;
+        border: 1px solid rgba(242, 213, 138, 255);
+    }
+    """
+
+
+def _AALYAN_PHASE6_force_real_tabs(gui_self):
+    try:
+        from PyQt5.QtWidgets import QApplication, QTabWidget, QTabBar, QPushButton
+
+        tab_qss = _AALYAN_PHASE6_gold_tab_qss()
+
+        # 1) Force app-level override at end.
+        app = QApplication.instance()
+        if app:
+            old = app.styleSheet() or ""
+            if "AALYAN_PHASE6_GOLD_NAV_OVERRIDE" not in old:
+                app.setStyleSheet(old + "\n\n/* AALYAN_PHASE6_GOLD_NAV_OVERRIDE */\n" + tab_qss)
+
+        # 2) Force all QTabWidget/QTabBar.
+        for tw in gui_self.findChildren(QTabWidget):
+            try:
+                tw.setDocumentMode(True)
+                tw.setStyleSheet(tab_qss)
+                tw.tabBar().setStyleSheet(tab_qss)
+                tw.tabBar().update()
+                tw.tabBar().repaint()
+            except Exception:
+                pass
+
+        for tb in gui_self.findChildren(QTabBar):
+            try:
+                tb.setStyleSheet(tab_qss)
+                tb.update()
+                tb.repaint()
+            except Exception:
+                pass
+
+        # 3) Some GUIs use QPushButtons as custom tabs.
+        # Style only top navigation buttons by exact text.
+        nav_names = {
+            "scan", "fusion", "learning", "camera", "hardware",
+            "federated", "security", "validation", "billing",
+            "analytics", "models"
+        }
+
+        active_name = ""
+        try:
+            if hasattr(gui_self, "tabs"):
+                active_name = str(gui_self.tabs.tabText(gui_self.tabs.currentIndex())).strip().lower()
+        except Exception:
+            pass
+
+        for btn in gui_self.findChildren(QPushButton):
+            try:
+                name = btn.text().strip().lower()
+                if name not in nav_names:
+                    continue
+
+                btn.setMinimumHeight(30)
+                btn.setStyleSheet(_AALYAN_PHASE6_nav_button_style(active=(name == active_name)))
+            except Exception:
+                pass
+
+        print("[AALYAN LIQUID UI] Phase 6 applied: top navigation forced gold/green.")
+
+    except Exception as e:
+        print("[AALYAN PHASE6] force nav failed:", e)
+
+
+def _AALYAN_PHASE6_patch_windows():
+    try:
+        from PyQt5.QtWidgets import QMainWindow
+        from PyQt5.QtCore import QTimer
+    except Exception as e:
+        print("[AALYAN PHASE6] patch import failed:", e)
+        return
+
+    patched = 0
+
+    for name, obj in list(globals().items()):
+        try:
+            if not isinstance(obj, type):
+                continue
+            if not issubclass(obj, QMainWindow):
+                continue
+            if getattr(obj, "_aalyan_phase6_wrapped", False):
+                continue
+
+            old_init = obj.__init__
+
+            def new_init(self, *args, __old_init=old_init, **kwargs):
+                __old_init(self, *args, **kwargs)
+
+                try:
+                    # Apply after all previous style timers.
+                    QTimer.singleShot(2500, lambda: _AALYAN_PHASE6_force_real_tabs(self))
+                    QTimer.singleShot(6500, lambda: _AALYAN_PHASE6_force_real_tabs(self))
+                    QTimer.singleShot(10500, lambda: _AALYAN_PHASE6_force_real_tabs(self))
+                    QTimer.singleShot(15000, lambda: _AALYAN_PHASE6_force_real_tabs(self))
+
+                    # Reapply on tab change so selected button updates.
+                    try:
+                        if hasattr(self, "tabs"):
+                            self.tabs.currentChanged.connect(
+                                lambda idx: QTimer.singleShot(150, lambda: _AALYAN_PHASE6_force_real_tabs(self))
+                            )
+                    except Exception:
+                        pass
+
+                    # Small stable timer because older patches may re-style.
+                    timer = QTimer(self)
+                    timer.setInterval(3000)
+                    timer.timeout.connect(lambda: _AALYAN_PHASE6_force_real_tabs(self))
+                    timer.start()
+                    self._aalyan_phase6_nav_timer = timer
+
+                except Exception as e:
+                    print("[AALYAN PHASE6] delayed nav failed:", e)
+
+            obj.__init__ = new_init
+            obj._aalyan_phase6_wrapped = True
+            patched += 1
+
+        except Exception:
+            pass
+
+    print(f"[AALYAN LIQUID UI] Phase 6 windows patched: {patched}")
+
+
+_AALYAN_PHASE6_patch_windows()
+
+# ============================================================
+# END AALYAN LIQUID UI PHASE 6
+# ============================================================
+
+
+
+
+# ============================================================
+# AALYAN LIQUID UI PHASE 7
+# Replace visible cyan QTabBar with custom gold/green navigation.
+# Layout-safe: hides original tab bar, adds custom row above tabs.
+# UI-only. Backend/API/DICOM/FHIR/PDF untouched.
+# ============================================================
+
+def _AALYAN_PHASE7_nav_button_style(active=False):
+    if active:
+        return """
+        QPushButton {
+            background: qlineargradient(
+                x1:0, y1:0, x2:1, y2:1,
+                stop:0 #F2D58A,
+                stop:0.48 #D7A84D,
+                stop:1 #2E7D58
+            );
+            color: #06100B;
+            border: 1px solid rgba(255,238,185,255);
+            border-radius: 17px;
+            padding: 8px 18px;
+            font-weight: 950;
+            min-width: 76px;
+            min-height: 30px;
+        }
+        QPushButton:hover {
+            background: #F2D58A;
+            color: #06100B;
+        }
+        """
+    return """
+    QPushButton {
+        background: rgba(13, 20, 16, 245);
+        color: #EAF7EF;
+        border: 1px solid rgba(215,168,77,170);
+        border-radius: 17px;
+        padding: 8px 18px;
+        font-weight: 900;
+        min-width: 76px;
+        min-height: 30px;
+    }
+    QPushButton:hover {
+        background: rgba(46,125,88,160);
+        color: #FFFFFF;
+        border: 1px solid rgba(242,213,138,255);
+    }
+    """
+
+
+def _AALYAN_PHASE7_update_nav(gui_self):
+    try:
+        tabs = getattr(gui_self, "tabs", None)
+        buttons = getattr(gui_self, "_aalyan_phase7_nav_buttons", [])
+        if not tabs or not buttons:
+            return
+
+        active = tabs.currentIndex()
+        for i, btn in enumerate(buttons):
+            btn.setStyleSheet(_AALYAN_PHASE7_nav_button_style(active=(i == active)))
+
+    except Exception as e:
+        print("[AALYAN PHASE7] nav update failed:", e)
+
+
+def _AALYAN_PHASE7_install_custom_nav(gui_self):
+    try:
+        from PyQt5.QtWidgets import QWidget, QHBoxLayout, QPushButton, QSizePolicy
+        from PyQt5.QtCore import Qt, QTimer
+
+        tabs = getattr(gui_self, "tabs", None)
+        if tabs is None:
+            return
+
+        if getattr(gui_self, "_aalyan_phase7_nav_installed", False):
+            _AALYAN_PHASE7_update_nav(gui_self)
+            return
+
+        gui_self._aalyan_phase7_nav_installed = True
+
+        # Hide original cyan/blue QTabBar completely.
+        try:
+            tabs.tabBar().hide()
+            tabs.setStyleSheet("""
+            QTabWidget::pane {
+                border: none;
+                background: #090D0B;
+                margin-top: 0px;
+            }
+            QTabBar {
+                height: 0px;
+                width: 0px;
+                background: transparent;
+                border: none;
+            }
+            QTabBar::tab {
+                height: 0px;
+                width: 0px;
+                margin: 0px;
+                padding: 0px;
+                border: none;
+            }
+            """)
+        except Exception:
+            pass
+
+        nav = QWidget()
+        nav.setObjectName("AALYANPhase7GoldNav")
+        nav.setMaximumHeight(52)
+        nav.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        nav.setStyleSheet("""
+        QWidget#AALYANPhase7GoldNav {
+            background: rgba(9, 13, 11, 245);
+            border-bottom: 1px solid rgba(215,168,77,120);
+        }
+        """)
+
+        lay = QHBoxLayout(nav)
+        lay.setContentsMargins(6, 6, 6, 6)
+        lay.setSpacing(7)
+
+        buttons = []
+
+        for i in range(tabs.count()):
+            name = str(tabs.tabText(i)).strip()
+            btn = QPushButton(name)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.clicked.connect(lambda checked=False, idx=i: tabs.setCurrentIndex(idx))
+            lay.addWidget(btn)
+            buttons.append(btn)
+
+        lay.addStretch(1)
+
+        gui_self._aalyan_phase7_nav_widget = nav
+        gui_self._aalyan_phase7_nav_buttons = buttons
+
+        # Insert nav row immediately before QTabWidget in its parent layout.
+        inserted = False
+        try:
+            parent = tabs.parentWidget()
+            parent_lay = parent.layout() if parent else None
+            if parent_lay is not None:
+                idx = parent_lay.indexOf(tabs)
+                if idx >= 0:
+                    parent_lay.insertWidget(idx, nav)
+                    inserted = True
+        except Exception as e:
+            print("[AALYAN PHASE7] parent insert warning:", e)
+
+        # Fallback: add as top toolbar if parent layout insertion fails.
+        if not inserted:
+            try:
+                from PyQt5.QtWidgets import QToolBar
+                tb = QToolBar("MEDAI Navigation")
+                tb.setMovable(False)
+                tb.setFloatable(False)
+                tb.addWidget(nav)
+                gui_self.addToolBar(tb)
+                gui_self._aalyan_phase7_toolbar = tb
+                inserted = True
+            except Exception as e:
+                print("[AALYAN PHASE7] toolbar fallback failed:", e)
+
+        try:
+            tabs.currentChanged.connect(lambda idx: _AALYAN_PHASE7_update_nav(gui_self))
+        except Exception:
+            pass
+
+        _AALYAN_PHASE7_update_nav(gui_self)
+
+        print("[AALYAN LIQUID UI] Phase 7 installed: custom gold navigation bar.")
+
+    except Exception as e:
+        print("[AALYAN PHASE7] install failed:", e)
+
+
+def _AALYAN_PHASE7_patch_windows():
+    try:
+        from PyQt5.QtWidgets import QMainWindow
+        from PyQt5.QtCore import QTimer
+    except Exception as e:
+        print("[AALYAN PHASE7] patch import failed:", e)
+        return
+
+    patched = 0
+
+    for name, obj in list(globals().items()):
+        try:
+            if not isinstance(obj, type):
+                continue
+            if not issubclass(obj, QMainWindow):
+                continue
+            if getattr(obj, "_aalyan_phase7_wrapped", False):
+                continue
+
+            old_init = obj.__init__
+
+            def new_init(self, *args, __old_init=old_init, **kwargs):
+                __old_init(self, *args, **kwargs)
+
+                try:
+                    # Run after all tabs are added and after previous style timers.
+                    QTimer.singleShot(2500, lambda: _AALYAN_PHASE7_install_custom_nav(self))
+                    QTimer.singleShot(6500, lambda: _AALYAN_PHASE7_install_custom_nav(self))
+                    QTimer.singleShot(11000, lambda: _AALYAN_PHASE7_install_custom_nav(self))
+
+                    # Keep old tab bar hidden.
+                    timer = QTimer(self)
+                    timer.setInterval(3000)
+                    timer.timeout.connect(lambda: _AALYAN_PHASE7_install_custom_nav(self))
+                    timer.start()
+                    self._aalyan_phase7_nav_timer = timer
+
+                except Exception as e:
+                    print("[AALYAN PHASE7] delayed install failed:", e)
+
+            obj.__init__ = new_init
+            obj._aalyan_phase7_wrapped = True
+            patched += 1
+
+        except Exception:
+            pass
+
+    print(f"[AALYAN LIQUID UI] Phase 7 windows patched: {patched}")
+
+
+_AALYAN_PHASE7_patch_windows()
+
+# ============================================================
+# END AALYAN LIQUID UI PHASE 7
+# ============================================================
+
+
+
+
+# ============================================================
+# AALYAN LIQUID UI PHASE 7.1
+# Compact custom gold navigation polish.
+# Fixes oversized Phase 7 nav row.
+# UI-only. Backend untouched.
+# ============================================================
+
+def _AALYAN_PHASE7_1_nav_style(active=False):
+    if active:
+        return """
+        QPushButton {
+            background: qlineargradient(
+                x1:0, y1:0, x2:1, y2:1,
+                stop:0 #F2D58A,
+                stop:0.50 #D7A84D,
+                stop:1 #2E7D58
+            );
+            color: #06100B;
+            border: 1px solid rgba(255,238,185,255);
+            border-radius: 12px;
+            padding: 5px 12px;
+            font-weight: 950;
+            min-width: 62px;
+            min-height: 24px;
+            max-height: 28px;
+        }
+        """
+    return """
+    QPushButton {
+        background: rgba(13, 20, 16, 245);
+        color: #EAF7EF;
+        border: 1px solid rgba(215,168,77,150);
+        border-radius: 12px;
+        padding: 5px 12px;
+        font-weight: 900;
+        min-width: 62px;
+        min-height: 24px;
+        max-height: 28px;
+    }
+    QPushButton:hover {
+        background: rgba(46,125,88,150);
+        color: #FFFFFF;
+        border: 1px solid rgba(242,213,138,255);
+    }
+    """
+
+
+def _AALYAN_PHASE7_1_apply(gui_self):
+    try:
+        from PyQt5.QtWidgets import QPushButton
+
+        tabs = getattr(gui_self, "tabs", None)
+        nav = getattr(gui_self, "_aalyan_phase7_nav_widget", None)
+        buttons = getattr(gui_self, "_aalyan_phase7_nav_buttons", [])
+
+        if tabs:
+            try:
+                tabs.tabBar().hide()
+            except Exception:
+                pass
+
+        if nav:
+            nav.setMinimumHeight(40)
+            nav.setMaximumHeight(42)
+            nav.setStyleSheet("""
+            QWidget#AALYANPhase7GoldNav {
+                background: rgba(9, 13, 11, 245);
+                border-top: 1px solid rgba(215,168,77,60);
+                border-bottom: 1px solid rgba(215,168,77,95);
+            }
+            """)
+
+            lay = nav.layout()
+            if lay:
+                lay.setContentsMargins(4, 4, 4, 4)
+                lay.setSpacing(5)
+
+        active = -1
+        if tabs:
+            try:
+                active = tabs.currentIndex()
+            except Exception:
+                pass
+
+        for i, btn in enumerate(buttons):
+            try:
+                btn.setMinimumHeight(24)
+                btn.setMaximumHeight(28)
+                btn.setMinimumWidth(62)
+                btn.setStyleSheet(_AALYAN_PHASE7_1_nav_style(active=(i == active)))
+            except Exception:
+                pass
+
+        # Also make bottom status chips less cyan-looking where possible.
+        for btn in gui_self.findChildren(QPushButton):
+            try:
+                txt = btn.text().strip().lower()
+                if txt in {"online", "ready"}:
+                    btn.setStyleSheet("""
+                    QPushButton {
+                        background: #2E7D58;
+                        color: #FFFFFF;
+                        border: 1px solid rgba(175,255,200,180);
+                        border-radius: 10px;
+                        padding: 3px 10px;
+                        font-weight: 950;
+                        min-height: 20px;
+                    }
+                    """)
+            except Exception:
+                pass
+
+        print("[AALYAN LIQUID UI] Phase 7.1 applied: compact nav.")
+
+    except Exception as e:
+        print("[AALYAN PHASE7.1] apply failed:", e)
+
+
+def _AALYAN_PHASE7_1_patch_windows():
+    try:
+        from PyQt5.QtWidgets import QMainWindow
+        from PyQt5.QtCore import QTimer
+    except Exception as e:
+        print("[AALYAN PHASE7.1] patch import failed:", e)
+        return
+
+    patched = 0
+
+    for name, obj in list(globals().items()):
+        try:
+            if not isinstance(obj, type):
+                continue
+            if not issubclass(obj, QMainWindow):
+                continue
+            if getattr(obj, "_aalyan_phase7_1_wrapped", False):
+                continue
+
+            old_init = obj.__init__
+
+            def new_init(self, *args, __old_init=old_init, **kwargs):
+                __old_init(self, *args, **kwargs)
+
+                QTimer.singleShot(4000, lambda: _AALYAN_PHASE7_1_apply(self))
+                QTimer.singleShot(8000, lambda: _AALYAN_PHASE7_1_apply(self))
+                QTimer.singleShot(12000, lambda: _AALYAN_PHASE7_1_apply(self))
+
+                try:
+                    if hasattr(self, "tabs"):
+                        self.tabs.currentChanged.connect(
+                            lambda idx: QTimer.singleShot(120, lambda: _AALYAN_PHASE7_1_apply(self))
+                        )
+                except Exception:
+                    pass
+
+            obj.__init__ = new_init
+            obj._aalyan_phase7_1_wrapped = True
+            patched += 1
+
+        except Exception:
+            pass
+
+    print(f"[AALYAN LIQUID UI] Phase 7.1 windows patched: {patched}")
+
+
+_AALYAN_PHASE7_1_patch_windows()
+
+# ============================================================
+# END AALYAN LIQUID UI PHASE 7.1
+# ============================================================
+
+
+
+
+# ============================================================
+# AALYAN LIQUID UI PHASE 7.2
+# Floating Apple-like pill navigation.
+# Overrides bulky Phase 7 / 7.1 browser-tab look.
+# UI-only. Backend/API/DICOM/FHIR/PDF untouched.
+# ============================================================
+
+def _AALYAN_PHASE7_2_nav_style(active=False):
+    if active:
+        return """
+        QPushButton {
+            background: qlineargradient(
+                x1:0, y1:0, x2:1, y2:1,
+                stop:0 #F2D58A,
+                stop:0.55 #D7A84D,
+                stop:1 #4D8D61
+            );
+            color: #07100B;
+            border: 1px solid rgba(255, 238, 185, 230);
+            border-radius: 16px;
+            padding: 5px 14px;
+            font-weight: 950;
+            font-size: 12px;
+            min-width: 68px;
+            max-height: 28px;
+        }
+        QPushButton:hover {
+            background: #F2D58A;
+            color: #07100B;
+        }
+        """
+    return """
+    QPushButton {
+        background: rgba(17, 24, 20, 185);
+        color: #DDEBDF;
+        border: 1px solid rgba(215, 168, 77, 105);
+        border-radius: 16px;
+        padding: 5px 14px;
+        font-weight: 850;
+        font-size: 12px;
+        min-width: 68px;
+        max-height: 28px;
+    }
+    QPushButton:hover {
+        background: rgba(46, 125, 88, 120);
+        color: #FFFFFF;
+        border: 1px solid rgba(242, 213, 138, 210);
+    }
+    """
+
+
+# Override old Phase 7 function names too, because old timers call these names.
+def _AALYAN_PHASE7_nav_button_style(active=False):
+    return _AALYAN_PHASE7_2_nav_style(active)
+
+
+def _AALYAN_PHASE7_1_nav_style(active=False):
+    return _AALYAN_PHASE7_2_nav_style(active)
+
+
+def _AALYAN_PHASE7_update_nav(gui_self):
+    try:
+        tabs = getattr(gui_self, "tabs", None)
+        buttons = getattr(gui_self, "_aalyan_phase7_nav_buttons", [])
+        if not tabs or not buttons:
+            return
+
+        active = tabs.currentIndex()
+        for i, btn in enumerate(buttons):
+            btn.setObjectName("AALYANFloatingNavButton")
+            btn.setMinimumHeight(26)
+            btn.setMaximumHeight(28)
+            btn.setMinimumWidth(68)
+            btn.setStyleSheet(_AALYAN_PHASE7_2_nav_style(active=(i == active)))
+
+    except Exception as e:
+        print("[AALYAN PHASE7.2] update nav failed:", e)
+
+
+def _AALYAN_PHASE7_1_apply(gui_self):
+    try:
+        _AALYAN_PHASE7_2_apply(gui_self)
+    except Exception:
+        pass
+
+
+def _AALYAN_PHASE7_2_apply(gui_self):
+    try:
+        from PyQt5.QtWidgets import QPushButton
+
+        tabs = getattr(gui_self, "tabs", None)
+        nav = getattr(gui_self, "_aalyan_phase7_nav_widget", None)
+        buttons = getattr(gui_self, "_aalyan_phase7_nav_buttons", [])
+
+        if tabs:
+            try:
+                tabs.tabBar().hide()
+                tabs.setStyleSheet("""
+                QTabWidget::pane {
+                    border: none;
+                    background: #090D0B;
+                    margin-top: 0px;
+                }
+                QTabBar {
+                    height: 0px;
+                    width: 0px;
+                    background: transparent;
+                    border: none;
+                }
+                QTabBar::tab {
+                    height: 0px;
+                    width: 0px;
+                    margin: 0px;
+                    padding: 0px;
+                    border: none;
+                }
+                """)
+            except Exception:
+                pass
+
+        if nav:
+            nav.setObjectName("AALYANPhase7GoldNav")
+            nav.setMinimumHeight(38)
+            nav.setMaximumHeight(40)
+            nav.setStyleSheet("""
+            QWidget#AALYANPhase7GoldNav {
+                background: rgba(9, 13, 11, 235);
+                border-top: 1px solid rgba(215,168,77,45);
+                border-bottom: 1px solid rgba(215,168,77,65);
+            }
+            """)
+
+            lay = nav.layout()
+            if lay:
+                lay.setContentsMargins(6, 5, 6, 5)
+                lay.setSpacing(8)
+
+        active = -1
+        if tabs:
+            try:
+                active = tabs.currentIndex()
+            except Exception:
+                pass
+
+        for i, btn in enumerate(buttons):
+            try:
+                btn.setObjectName("AALYANFloatingNavButton")
+                btn.setMinimumHeight(26)
+                btn.setMaximumHeight(28)
+                btn.setMinimumWidth(68)
+                btn.setStyleSheet(_AALYAN_PHASE7_2_nav_style(active=(i == active)))
+            except Exception:
+                pass
+
+        # Remove old cyan from nav text buttons if any exact nav buttons still exist.
+        nav_names = {
+            "scan", "fusion", "learning", "camera", "hardware",
+            "federated", "security", "validation", "billing",
+            "analytics", "models"
+        }
+
+        active_name = ""
+        try:
+            if tabs:
+                active_name = str(tabs.tabText(tabs.currentIndex())).strip().lower()
+        except Exception:
+            pass
+
+        for btn in gui_self.findChildren(QPushButton):
+            try:
+                name = btn.text().strip().lower()
+                if name not in nav_names:
+                    continue
+                btn.setMinimumHeight(26)
+                btn.setMaximumHeight(28)
+                btn.setStyleSheet(_AALYAN_PHASE7_2_nav_style(active=(name == active_name)))
+            except Exception:
+                pass
+
+        print("[AALYAN LIQUID UI] Phase 7.2 applied: floating liquid nav.")
+
+    except Exception as e:
+        print("[AALYAN PHASE7.2] apply failed:", e)
+
+
+def _AALYAN_PHASE7_2_patch_windows():
+    try:
+        from PyQt5.QtWidgets import QMainWindow
+        from PyQt5.QtCore import QTimer
+    except Exception as e:
+        print("[AALYAN PHASE7.2] patch import failed:", e)
+        return
+
+    patched = 0
+
+    for name, obj in list(globals().items()):
+        try:
+            if not isinstance(obj, type):
+                continue
+            if not issubclass(obj, QMainWindow):
+                continue
+            if getattr(obj, "_aalyan_phase7_2_wrapped", False):
+                continue
+
+            old_init = obj.__init__
+
+            def new_init(self, *args, __old_init=old_init, **kwargs):
+                __old_init(self, *args, **kwargs)
+
+                QTimer.singleShot(4200, lambda: _AALYAN_PHASE7_2_apply(self))
+                QTimer.singleShot(8200, lambda: _AALYAN_PHASE7_2_apply(self))
+                QTimer.singleShot(12200, lambda: _AALYAN_PHASE7_2_apply(self))
+
+                try:
+                    if hasattr(self, "tabs"):
+                        self.tabs.currentChanged.connect(
+                            lambda idx: QTimer.singleShot(120, lambda: _AALYAN_PHASE7_2_apply(self))
+                        )
+                except Exception:
+                    pass
+
+                # Keep it stable because older timers are still running.
+                timer = QTimer(self)
+                timer.setInterval(2500)
+                timer.timeout.connect(lambda: _AALYAN_PHASE7_2_apply(self))
+                timer.start()
+                self._aalyan_phase7_2_timer = timer
+
+            obj.__init__ = new_init
+            obj._aalyan_phase7_2_wrapped = True
+            patched += 1
+
+        except Exception:
+            pass
+
+    print(f"[AALYAN LIQUID UI] Phase 7.2 windows patched: {patched}")
+
+
+_AALYAN_PHASE7_2_patch_windows()
+
+# ============================================================
+# END AALYAN LIQUID UI PHASE 7.2
+# ============================================================
+
+
+
+
+# ============================================================
+# AALYAN LIQUID UI PHASE 8
+# Final stable Apple-like liquid pill navigation.
+# Stops older UI timers from fighting styles.
+# UI-only. Backend/API/DICOM/FHIR/PDF untouched.
+# ============================================================
+
+def _AALYAN_PHASE8_nav_style(active=False):
+    if active:
+        return """
+        QPushButton {
+            background: qlineargradient(
+                x1:0, y1:0, x2:1, y2:1,
+                stop:0 #FFF0B8,
+                stop:0.42 #D7A84D,
+                stop:1 #3B8A5A
+            );
+            color: #07100B;
+            border: 1px solid rgba(255, 245, 205, 245);
+            border-radius: 18px;
+            padding: 6px 16px;
+            font-weight: 950;
+            font-size: 12px;
+            min-width: 70px;
+            min-height: 28px;
+            max-height: 32px;
+        }
+        QPushButton:hover {
+            background: #F2D58A;
+            color: #07100B;
+        }
+        """
+    return """
+    QPushButton {
+        background: rgba(255, 255, 255, 18);
+        color: #EAF7EF;
+        border: 1px solid rgba(215,168,77,95);
+        border-radius: 18px;
+        padding: 6px 16px;
+        font-weight: 850;
+        font-size: 12px;
+        min-width: 70px;
+        min-height: 28px;
+        max-height: 32px;
+    }
+    QPushButton:hover {
+        background: rgba(46,125,88,135);
+        color: #FFFFFF;
+        border: 1px solid rgba(242,213,138,220);
+    }
+    """
+
+
+def _AALYAN_PHASE8_stop_old_timers(gui_self):
+    # These timers were useful during patch testing, but now they cause style fighting.
+    for attr in [
+        "_aalyan_phase5_2_timer",
+        "_aalyan_phase5_4_timer",
+        "_aalyan_phase6_nav_timer",
+        "_aalyan_phase7_nav_timer",
+        "_aalyan_phase7_2_timer",
+    ]:
+        try:
+            timer = getattr(gui_self, attr, None)
+            if timer:
+                timer.stop()
+        except Exception:
+            pass
+
+
+def _AALYAN_PHASE8_apply(gui_self):
+    try:
+        from PyQt5.QtWidgets import QPushButton, QTabWidget, QTabBar
+
+        _AALYAN_PHASE8_stop_old_timers(gui_self)
+
+        tabs = getattr(gui_self, "tabs", None)
+
+        # Hide old real QTabBar forever.
+        if tabs:
+            try:
+                tabs.tabBar().hide()
+                tabs.setStyleSheet("""
+                QTabWidget::pane {
+                    border: none;
+                    background: #090D0B;
+                    margin-top: 0px;
+                }
+                QTabBar {
+                    height: 0px;
+                    width: 0px;
+                    background: transparent;
+                    border: none;
+                }
+                QTabBar::tab {
+                    height: 0px;
+                    width: 0px;
+                    margin: 0px;
+                    padding: 0px;
+                    border: none;
+                }
+                """)
+            except Exception:
+                pass
+
+        for tw in gui_self.findChildren(QTabWidget):
+            try:
+                tw.tabBar().hide()
+            except Exception:
+                pass
+
+        for tb in gui_self.findChildren(QTabBar):
+            try:
+                tb.hide()
+            except Exception:
+                pass
+
+        # Use Phase 7 custom nav widget if already created.
+        nav = getattr(gui_self, "_aalyan_phase7_nav_widget", None)
+        buttons = getattr(gui_self, "_aalyan_phase7_nav_buttons", [])
+
+        if nav:
+            nav.setMinimumHeight(46)
+            nav.setMaximumHeight(48)
+            nav.setStyleSheet("""
+            QWidget#AALYANPhase7GoldNav {
+                background: rgba(9, 13, 11, 235);
+                border-top: 1px solid rgba(215,168,77,35);
+                border-bottom: 1px solid rgba(215,168,77,70);
+            }
+            """)
+
+            lay = nav.layout()
+            if lay:
+                lay.setContentsMargins(8, 7, 8, 7)
+                lay.setSpacing(10)
+
+        active_idx = -1
+        active_name = ""
+        if tabs:
+            try:
+                active_idx = tabs.currentIndex()
+                active_name = str(tabs.tabText(active_idx)).strip().lower()
+            except Exception:
+                pass
+
+        # Style custom nav buttons.
+        for i, btn in enumerate(buttons):
+            try:
+                btn.setObjectName("AALYANFinalLiquidNavButton")
+                btn.setMinimumHeight(28)
+                btn.setMaximumHeight(32)
+                btn.setMinimumWidth(70)
+                btn.setStyleSheet(_AALYAN_PHASE8_nav_style(active=(i == active_idx)))
+            except Exception:
+                pass
+
+        # Also catch any remaining nav QPushButtons by text.
+        nav_names = {
+            "scan", "fusion", "learning", "camera", "hardware",
+            "federated", "security", "validation", "billing",
+            "analytics", "models"
+        }
+
+        for btn in gui_self.findChildren(QPushButton):
+            try:
+                name = btn.text().strip().lower()
+                if name not in nav_names:
+                    continue
+
+                btn.setObjectName("AALYANFinalLiquidNavButton")
+                btn.setMinimumHeight(28)
+                btn.setMaximumHeight(32)
+                btn.setMinimumWidth(70)
+                btn.setStyleSheet(_AALYAN_PHASE8_nav_style(active=(name == active_name)))
+            except Exception:
+                pass
+
+        print("[AALYAN LIQUID UI] Phase 8 applied: final liquid nav stable.")
+
+    except Exception as e:
+        print("[AALYAN PHASE8] apply failed:", e)
+
+
+# Override older nav functions because their timers call these names.
+def _AALYAN_PHASE6_force_real_tabs(gui_self):
+    _AALYAN_PHASE8_apply(gui_self)
+
+def _AALYAN_PHASE7_update_nav(gui_self):
+    _AALYAN_PHASE8_apply(gui_self)
+
+def _AALYAN_PHASE7_1_apply(gui_self):
+    _AALYAN_PHASE8_apply(gui_self)
+
+def _AALYAN_PHASE7_2_apply(gui_self):
+    _AALYAN_PHASE8_apply(gui_self)
+
+
+def _AALYAN_PHASE8_patch_windows():
+    try:
+        from PyQt5.QtWidgets import QMainWindow
+        from PyQt5.QtCore import QTimer
+    except Exception as e:
+        print("[AALYAN PHASE8] patch import failed:", e)
+        return
+
+    patched = 0
+
+    for name, obj in list(globals().items()):
+        try:
+            if not isinstance(obj, type):
+                continue
+            if not issubclass(obj, QMainWindow):
+                continue
+            if getattr(obj, "_aalyan_phase8_wrapped", False):
+                continue
+
+            old_init = obj.__init__
+
+            def new_init(self, *args, __old_init=old_init, **kwargs):
+                __old_init(self, *args, **kwargs)
+
+                QTimer.singleShot(5000, lambda: _AALYAN_PHASE8_apply(self))
+                QTimer.singleShot(9000, lambda: _AALYAN_PHASE8_apply(self))
+                QTimer.singleShot(13000, lambda: _AALYAN_PHASE8_apply(self))
+
+                try:
+                    if hasattr(self, "tabs"):
+                        self.tabs.currentChanged.connect(
+                            lambda idx: QTimer.singleShot(120, lambda: _AALYAN_PHASE8_apply(self))
+                        )
+                except Exception:
+                    pass
+
+                # One final stable timer only.
+                timer = QTimer(self)
+                timer.setInterval(5000)
+                timer.timeout.connect(lambda: _AALYAN_PHASE8_apply(self))
+                timer.start()
+                self._aalyan_phase8_timer = timer
+
+            obj.__init__ = new_init
+            obj._aalyan_phase8_wrapped = True
+            patched += 1
+
+        except Exception:
+            pass
+
+    print(f"[AALYAN LIQUID UI] Phase 8 windows patched: {patched}")
+
+
+_AALYAN_PHASE8_patch_windows()
+
+# ============================================================
+# END AALYAN LIQUID UI PHASE 8
+# ============================================================
+
+
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
